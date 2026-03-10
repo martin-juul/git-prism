@@ -1,0 +1,137 @@
+# File patterns for git-prism
+# Used to filter and classify files during analysis
+
+# Binary file extensions to exclude
+binary_extensions:
+  # Images
+  - .png
+  - .jpg
+  - .jpeg
+  - .gif
+  - .bmp
+  - .ico
+  - .webp
+  - .tiff
+  - .psd
+  - .ai
+  - .svg
+
+  # Audio/Video
+  - .mp3
+  - .mp4
+  - .wav
+  - .avi
+  - .mov
+  - .wmv
+  - .flv
+  - .mkv
+  - .webm
+  - .ogg
+  - .flac
+
+  # Archives
+  - .zip
+  - .tar
+  - .gz
+  - .bz2
+  - .xz
+  - .rar
+  - .7z
+  - .tgz
+
+  # Executables
+  - .exe
+  - .dll
+  - .so
+  - .dylib
+  - .app
+  - .dmg
+
+  # Compiled
+  - .pyc
+  - .pyo
+  - .class
+  - .jar
+  - .war
+  - .o
+  - .a
+  - .lib
+
+  # Fonts
+  - .ttf
+  - .otf
+  - .woff
+  - .woff2
+  - .eot
+
+  # Documents
+  - .pdf
+  - .doc
+  - .docx
+  - .xls
+  - .xlsx
+
+# Generated file patterns to exclude
+generated_patterns:
+  # Lock files
+  - package-lock.json
+  - yarn.lock
+  - pnpm-lock.yaml
+  - composer.lock
+  - cargo.lock
+  - poetry.lock
+  - gemfile.lock
+  - pipfile.lock
+
+  # Minified files
+  - "*.min.js"
+  - "*.min.css"
+
+  # Generated code
+  - "*.pb.go"
+  - "*.pb.rs"
+  - "*_pb2.py"
+  - "*.d.ts"
+
+  # IDE/OS files
+  - .DS_Store
+  - thumbs.db
+
+# Directories to ignore when scanning
+ignore_directories:
+  - node_modules
+  - .venv
+  - venv
+  - __pycache__
+  - .git
+  - dist
+  - build
+  - target
+  - .idea
+  - .vscode
+  - vendor
+  - .tox
+  - .pytest_cache
+  - .mypy_cache
+  - htmlcov
+  - .eggs
+  - "*.egg-info"
+
+# Core module patterns (higher importance)
+core_module_patterns:
+  - "*/models/*"
+  - "*/core/*"
+  - "*/lib/*"
+  - "*/src/*"
+  - "*/app/*"
+  - "*/main.*"
+  - "*/index.*"
+
+# Peripheral module patterns (lower importance)
+peripheral_module_patterns:
+  - "*/test*"
+  - "*/tests/*"
+  - "*/docs/*"
+  - "*/examples/*"
+  - "*/scripts/*"
+  - "*/config/*"

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}{{ repo_name }} - Git Prism{% endblock %}
+
+{% block content %}
+<header>
+    <h1>{{ repo_name }}</h1>
+    <p class="subtitle">{{ repo_path }}</p>
+    <p class="subtitle">Generated: {{ generated_at }}</p>
+</header>
+
+<!-- Score Distribution -->
+<section class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <h2>Contributor Expertise Scores</h2>
+    </div>
+    <div class="chart-container">
+        {{ score_chart | safe }}
+    </div>
+</section>
+
+<!-- Contributor Network -->
+<section class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <h2>Contributor Network</h2>
+    </div>
+    <div class="network-container" style="height: 500px;">
+        {{ contributor_graph | safe }}
+    </div>
+</section>
+
+<!-- Contributor Table -->
+<section class="card">
+    <h2>All Contributors</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Score</th>
+                <th>Commits</th>
+                <th>Lines Changed</th>
+                <th>First Commit</th>
+                <th>Last Commit</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for score in scores %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ score.contributor_name }}</td>
+                <td style="font-family: monospace; font-size: 0.85rem;">{{ score.contributor_email }}</td>
+                <td>{{ "%.1f" | format(score.total_score) }}</td>
+                <td>{{ score.commit_count }}</td>
+                <td>{{ score.lines_changed | number_format }}</td>
+                <td>{{ contributors[loop.index0].first_commit.strftime('%Y-%m-%d') if contributors[loop.index0].first_commit else 'N/A' }}</td>
+                <td>{{ contributors[loop.index0].last_commit.strftime('%Y-%m-%d') if contributors[loop.index0].last_commit else 'N/A' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

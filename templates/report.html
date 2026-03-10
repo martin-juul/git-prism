@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Git Prism{% endblock %}
+
+{% block content %}
+<header>
+    <h1>{{ title }}</h1>
+    <p class="subtitle">Contributor expertise analysis across {{ total_repos }} repositories</p>
+</header>
+
+<!-- Summary Stats -->
+<section class="grid grid-4" style="margin-bottom: 2rem;">
+    <div class="card stat-card">
+        <div class="stat-value">{{ total_repos }}</div>
+        <div class="stat-label">Repositories</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ total_contributors }}</div>
+        <div class="stat-label">Contributors</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ total_commits | number_format }}</div>
+        <div class="stat-label">Commits</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ total_lines | number_format }}</div>
+        <div class="stat-label">Lines Changed</div>
+    </div>
+</section>
+
+<!-- Expertise Heatmap -->
+<section class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <h2>Contributor Expertise Heatmap</h2>
+    </div>
+    <p class="subtitle">Top contributors across repositories by expertise score</p>
+    <div class="chart-container">
+        {{ heatmap_chart | safe }}
+    </div>
+</section>
+
+<!-- Knowledge Gap & Code Rot -->
+<section class="grid grid-2" style="margin-bottom: 2rem;">
+    <div class="card">
+        <div class="card-header">
+            <h3>Knowledge Distribution</h3>
+        </div>
+        <p class="subtitle">Knowledge holders vs total contributors per repo</p>
+        <div class="chart-container">
+            {{ knowledge_gap_chart | safe }}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <h3>Code Rot Analysis</h3>
+        </div>
+        <p class="subtitle">Active vs stale contributors (1 year threshold)</p>
+        <div class="chart-container">
+            {{ code_rot_chart | safe }}
+        </div>
+    </div>
+</section>
+
+<!-- Timeline -->
+<section class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <h2>Contribution Activity Timeline</h2>
+    </div>
+    <p class="subtitle">Commit activity over the last 12 months</p>
+    <div class="chart-container">
+        {{ timeline_chart | safe }}
+    </div>
+</section>
+
+<!-- Collaboration Network -->
+<section class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <h2>Collaboration Network</h2>
+    </div>
+    <p class="subtitle">Contributor relationships based on shared repositories</p>
+    <div class="network-container" style="height: 600px;">
+        {{ collaboration_graph | safe }}
+    </div>
+</section>
+
+<!-- Expertise Network -->
+<section class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <h2>Expertise Network</h2>
+    </div>
+    <p class="subtitle">Contributor-repository expertise relationships</p>
+    <div class="network-container" style="height: 700px;">
+        {{ expertise_graph | safe }}
+    </div>
+</section>
+
+<!-- Repository Details -->
+<h2 style="margin-bottom: 1rem;">Repository Details</h2>
+
+{% for result in results %}
+<section class="repo-section">
+    <div class="repo-header">
+        <div>
+            <span class="repo-name">{{ result.repo_name }}</span>
+            <span class="repo-path">{{ result.repo_path }}</span>
+        </div>
+        <div>
+            {% set stats = knowledge_stats[result.repo_name] %}
+            <span class="badge badge-{{ 'success' if stats.bus_factor >= 3 else 'warning' if stats.bus_factor >= 2 else 'danger' }}">
+                Bus Factor: {{ stats.bus_factor }}
+            </span>
+            <span class="badge badge-primary">
+                {{ result.scores | length }} Contributors
+            </span>
+        </div>
+    </div>
+    <div class="card" style="border-radius: 0 0 8px 8px;">
+        <h3>Top Contributors</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Contributor</th>
+                    <th>Score</th>
+                    <th>Commits</th>
+                    <th>Lines Changed</th>
+                    <th>Expertise</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for score in result.scores[:10] %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ score.contributor_name }}</td>
+                    <td>{{ "%.1f" | format(score.total_score) }}</td>
+                    <td>{{ score.commit_count }}</td>
+                    <td>{{ score.lines_changed | number_format }}</td>
+                    <td>
+                        <div class="progress-bar" style="width: 100px;">
+                            <div class="progress-fill" style="width: {{ (score.total_score / 100 * 100) | round }}%;"></div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% set stats = knowledge_stats[result.repo_name] %}
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+            <h4 style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Knowledge Distribution</h4>
+            <div class="grid grid-3">
+                <div>
+                    <span class="badge badge-{{ 'danger' if stats.gini_coefficient > 0.7 else 'warning' if stats.gini_coefficient > 0.5 else 'success' }}">
+                        Gini: {{ "%.2f" | format(stats.gini_coefficient) }}
+                    </span>
+                    <span style="color: var(--text-muted); font-size: 0.8rem; margin-left: 0.5rem;">
+                        (0 = equal, 1 = concentrated)
+                    </span>
+                </div>
+                <div>
+                    <span class="badge badge-primary">
+                        Top Contributor: {{ "%.1f" | format(stats.top_contributor_share) }}%
+                    </span>
+                </div>
+                <div>
+                    <span class="badge badge-{{ 'success' if stats.bus_factor >= 3 else 'warning' if stats.bus_factor >= 2 else 'danger' }}">
+                        Bus Factor: {{ stats.bus_factor }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endfor %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Make Plotly charts responsive
+    window.addEventListener('resize', function() {
+        Plotly.Plots.resize(document.querySelectorAll('.plotly-graph-div'));
+    });
+</script>
+{% endblock %}

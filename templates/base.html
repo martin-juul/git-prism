@@ -6,8 +6,9 @@
     <title>{% block title %}Git Prism Report{% endblock %}</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
-        /* Colors must match git_prism/visualizations/theme.py */
+        /* Force dark theme - no color scheme preference handling */
         :root {
+            color-scheme: dark;
             --bg-primary: #0f172a;
             --bg-secondary: #1e293b;
             --bg-tertiary: #334155;

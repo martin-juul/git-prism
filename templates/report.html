@@ -28,6 +28,29 @@
     </div>
 </section>
 
+<!-- Code Classification -->
+<h2 style="margin-bottom: 1rem;">Code Classification</h2>
+<section class="grid grid-2" style="margin-bottom: 2rem;">
+    <div class="card">
+        <div class="card-header">
+            <h3>Language Distribution</h3>
+        </div>
+        <p class="subtitle">Top languages across all repositories by file count</p>
+        <div class="chart-container">
+            {{ language_chart | safe }}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <h3>File Type Distribution</h3>
+        </div>
+        <p class="subtitle">Frontend vs Backend vs Data vs Configuration</p>
+        <div class="chart-container">
+            {{ filetype_chart | safe }}
+        </div>
+    </div>
+</section>
+
 <!-- Expertise Heatmap -->
 <section class="card" style="margin-bottom: 2rem;">
     <div class="card-header">
@@ -112,6 +135,11 @@
             <span class="badge badge-primary">
                 {{ result.scores | length }} Contributors
             </span>
+            {% if result.classification %}
+            <span class="badge badge-secondary">
+                {{ result.classification.primary_language }}
+            </span>
+            {% endif %}
         </div>
     </div>
     <div class="card" style="border-radius: 0 0 8px 8px;">
@@ -169,6 +197,35 @@
                 </div>
             </div>
         </div>
+        {% if result.classification %}
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+            <h4 style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Code Classification</h4>
+            <div class="grid grid-3">
+                <div>
+                    <span style="color: var(--text-muted); font-size: 0.8rem;">Primary Language:</span>
+                    <span class="badge badge-primary">{{ result.classification.primary_language }}</span>
+                </div>
+                <div>
+                    <span style="color: var(--text-muted); font-size: 0.8rem;">Total Files:</span>
+                    <span class="badge badge-secondary">{{ result.classification.total_files }}</span>
+                </div>
+                <div>
+                    <span style="color: var(--text-muted); font-size: 0.8rem;">Languages:</span>
+                    {% for lang, count in (result.classification.languages.items() | list)[:5] %}
+                    <span class="badge" style="font-size: 0.75rem;">{{ lang }}: {{ count }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% if result.classification.frameworks %}
+            <div style="margin-top: 0.5rem;">
+                <span style="color: var(--text-muted); font-size: 0.8rem;">Frameworks:</span>
+                {% for framework in result.classification.frameworks %}
+                <span class="badge badge-secondary">{{ framework }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
 </section>
 {% endfor %}

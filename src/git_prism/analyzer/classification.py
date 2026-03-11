@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from git_prism.analyzer.filters import FileFilter
 
 
 class FileType(Enum):
@@ -39,6 +43,25 @@ class FileClassification:
     framework: str | None = None
     is_generated: bool = False
     is_binary: bool = False
+
+
+@dataclass
+class RepoClassification:
+    """Aggregated classification summary for a repository.
+
+    Attributes:
+        languages: Mapping of language name to file count.
+        file_types: Mapping of FileType to file count.
+        frameworks: List of detected frameworks.
+        primary_language: Most common language by file count.
+        total_files: Total number of files classified.
+    """
+
+    languages: dict[str, int] = field(default_factory=dict)
+    file_types: dict[FileType, int] = field(default_factory=dict)
+    frameworks: list[str] = field(default_factory=list)
+    primary_language: str = "None"
+    total_files: int = 0
 
 
 # Language detection by extension
@@ -412,3 +435,69 @@ def detect_frameworks(repo_path: str | Path) -> list[str]:
             pass
 
     return list(set(frameworks))  # Remove duplicates
+
+
+def classify_repository(
+    repo_path: str | Path,
+    file_filter: FileFilter | None = None,
+) -> RepoClassification:
+    """Classify all files in a repository and aggregate results.
+
+    Args:
+        repo_path: Path to the git repository.
+        file_filter: Optional filter for excluding files.
+
+    Returns:
+        RepoClassification with aggregated statistics.
+
+    Example:
+        >>> classification = classify_repository("./my-repo")
+        >>> print(classification.primary_language)
+        'Python'
+        >>> print(classification.frameworks)
+        ['Django', 'React']
+    """
+    from git_prism.analyzer.filters import create_default_filter
+
+    path = Path(repo_path) if isinstance(repo_path, str) else repo_path
+    filter_ = file_filter or create_default_filter()
+
+    languages: dict[str, int] = {}
+    file_types: dict[FileType, int] = {}
+
+    # Walk the working tree
+    for file_path in path.rglob("*"):
+        if not file_path.is_file():
+            continue
+
+        # Skip excluded files
+        relative_path = file_path.relative_to(path)
+        if not filter_.should_include(str(relative_path)):
+            continue
+
+        try:
+            classification = classify_file(file_path)
+            if classification.is_binary:
+                continue
+
+            # Aggregate
+            languages[classification.language] = languages.get(classification.language, 0) + 1
+            file_types[classification.file_type] = file_types.get(classification.file_type, 0) + 1
+
+        except (PermissionError, OSError):
+            continue  # Skip unreadable files
+
+    # Detect frameworks
+    frameworks = detect_frameworks(path)
+
+    # Find primary language
+    primary_language = max(languages, key=languages.get) if languages else "None"
+    total_files = sum(languages.values())
+
+    return RepoClassification(
+        languages=languages,
+        file_types=file_types,
+        frameworks=frameworks,
+        primary_language=primary_language,
+        total_files=total_files,
+    )

@@ -5,7 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from git_prism.analyzer.classification import FileClassification, classify_file, detect_frameworks
+from git_prism.analyzer.classification import (
+    FileClassification,
+    RepoClassification,
+    classify_file,
+    classify_repository,
+    detect_frameworks,
+)
 from git_prism.analyzer.commits import CommitInfo, stream_commits
 from git_prism.analyzer.contributors import Contributor, parse_mailmap, resolve_contributor
 from git_prism.analyzer.filters import FileFilter, create_default_filter
@@ -21,12 +27,14 @@ __all__ = [
     "Contributor",
     "ExpertiseScore",
     "FileClassification",
+    "RepoClassification",
     "FileFilter",
     "stream_commits",
     "parse_mailmap",
     "resolve_contributor",
     "calculate_expertise_scores",
     "classify_file",
+    "classify_repository",
     "detect_frameworks",
     "create_default_filter",
 ]
@@ -95,11 +103,15 @@ class Analyzer:
         # Calculate expertise scores
         scores = calculate_expertise_scores(contributors)
 
+        # Classify repository
+        classification = classify_repository(str(repo.path), self._file_filter)
+
         return AnalysisResult(
             repo_name=repo.name,
             repo_path=repo.path,
             contributors=list(contributors.values()),
             scores=scores,
+            classification=classification,
         )
 
 
@@ -112,6 +124,7 @@ class AnalysisResult:
         repo_path: Path,
         contributors: list[Contributor],
         scores: list[ExpertiseScore],
+        classification: RepoClassification | None = None,
     ) -> None:
         """Initialize analysis result.
 
@@ -120,8 +133,10 @@ class AnalysisResult:
             repo_path: Path to the repository.
             contributors: List of contributors found.
             scores: List of expertise scores.
+            classification: Repository classification data.
         """
         self.repo_name = repo_name
         self.repo_path = repo_path if isinstance(repo_path, Path) else Path(repo_path)
         self.contributors = contributors
         self.scores = scores
+        self.classification = classification

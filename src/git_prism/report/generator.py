@@ -61,7 +61,9 @@ class ReportGenerator:
         from git_prism.visualizations.charts import (
             create_code_rot_chart,
             create_expertise_heatmap,
+            create_filetype_chart,
             create_knowledge_gap_chart,
+            create_language_distribution_chart,
             create_timeline_chart,
         )
         from git_prism.visualizations.networks import (
@@ -73,6 +75,8 @@ class ReportGenerator:
 
         # Generate visualizations
         heatmap_chart = create_expertise_heatmap(results)
+        language_chart = create_language_distribution_chart(results)
+        filetype_chart = create_filetype_chart(results)
         knowledge_gap_chart = create_knowledge_gap_chart(results)
         code_rot_chart = create_code_rot_chart(results)
         timeline_chart = create_timeline_chart(results)
@@ -108,6 +112,8 @@ class ReportGenerator:
             total_lines=total_lines,
             knowledge_stats=knowledge_stats,
             heatmap_chart=heatmap_chart,
+            language_chart=language_chart,
+            filetype_chart=filetype_chart,
             knowledge_gap_chart=knowledge_gap_chart,
             code_rot_chart=code_rot_chart,
             timeline_chart=timeline_chart,
@@ -130,7 +136,10 @@ class ReportGenerator:
             result: AnalysisResult for one repository.
             output_path: Path to write the HTML report.
         """
-        from git_prism.visualizations.charts import create_score_distribution_chart
+        from git_prism.visualizations.charts import (
+            create_filetype_chart,
+            create_score_distribution_chart,
+        )
         from git_prism.visualizations.networks import create_contributor_graph
 
         output = Path(output_path) if isinstance(output_path, str) else output_path
@@ -138,6 +147,9 @@ class ReportGenerator:
         # Generate visualizations
         score_chart = create_score_distribution_chart(result.scores)
         contributor_graph = create_contributor_graph(result)
+
+        # Generate classification chart for single repo
+        filetype_chart = create_filetype_chart([result]) if result.classification else ""
 
         # Render template
         template = self.env.get_template("repo_detail.html")
@@ -147,8 +159,10 @@ class ReportGenerator:
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
             scores=result.scores,
             contributors=result.contributors,
+            classification=result.classification,
             score_chart=score_chart,
             contributor_graph=contributor_graph,
+            filetype_chart=filetype_chart,
         )
 
         output.parent.mkdir(parents=True, exist_ok=True)

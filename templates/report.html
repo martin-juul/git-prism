@@ -244,11 +244,15 @@
                 <span class="badge">{{ area_name }}</span>
                 {% endfor %}
             </div>
+            {% elif result.classification.is_fullstack %}
+            <div style="margin-top: 0.5rem;">
+                <span class="badge badge-primary">Fullstack</span>
+            </div>
             {% endif %}
         </div>
         {% endif %}
 
-        {% if result.classification and result.classification.is_monorepo and result.area_scores %}
+        {% if result.classification and (result.classification.is_monorepo or result.classification.is_fullstack) and result.area_scores %}
         <!-- Per-Area Expertise -->
         <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
             <h3 style="font-size: 1rem; margin-bottom: 1rem;">Area-Specific Expertise</h3>

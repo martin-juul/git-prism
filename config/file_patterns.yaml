@@ -1,5 +1,266 @@
 # File patterns for git-prism
 # Used to filter and classify files during analysis
+#
+# User override: Create ~/.config/git-prism/file_patterns.yaml to customize
+
+# Language detection by file extension
+# Maps extension (with dot) to language name
+language_map:
+  # Frontend
+  .js: JavaScript
+  .jsx: JavaScript
+  .ts: TypeScript
+  .tsx: TypeScript
+  .vue: Vue
+  .svelte: Svelte
+  .html: HTML
+  .htm: HTML
+  .css: CSS
+  .scss: SCSS
+  .sass: Sass
+  .less: Less
+  .styl: Stylus
+
+  # Backend - Scripting
+  .py: Python
+  .pyw: Python
+  .rb: Ruby
+  .rake: Ruby
+  .php: PHP
+  .phtml: PHP
+  .pl: Perl
+  .pm: Perl
+  .lua: Lua
+  .r: R
+  .jl: Julia
+
+  # Backend - Compiled
+  .go: Go
+  .rs: Rust
+  .java: Java
+  .kt: Kotlin
+  .kts: Kotlin
+  .scala: Scala
+  .cs: C#
+  .fs: F#
+  .swift: Swift
+  .m: Objective-C
+  .mm: Objective-C++
+
+  # Systems
+  .c: C
+  .cc: C++
+  .cpp: C++
+  .cxx: C++
+  .h: C/C++ Header
+  .hpp: C++ Header
+  .hxx: C++ Header
+
+  # Functional
+  .ex: Elixir
+  .exs: Elixir
+  .erl: Erlang
+  .hs: Haskell
+  .lhs: Haskell
+  .clj: Clojure
+  .cljs: ClojureScript
+  .lisp: Lisp
+  .lsp: Lisp
+  .ml: OCaml
+  .mli: OCaml
+  .re: Reason
+  .rei: Reason
+
+  # Shell/Scripting
+  .sh: Shell
+  .bash: Bash
+  .zsh: Zsh
+  .fish: Fish
+  .ps1: PowerShell
+  .psm1: PowerShell
+  .bat: Batch
+  .cmd: Batch
+  .awk: AWK
+  .sed: Sed
+
+  # Data/Config
+  .json: JSON
+  .yaml: YAML
+  .yml: YAML
+  .toml: TOML
+  .xml: XML
+  .ini: INI
+  .cfg: Config
+  .conf: Config
+  .env: Environment
+  .properties: Properties
+
+  # Database
+  .sql: SQL
+  .psql: SQL
+  .mysql: SQL
+  .graphql: GraphQL
+  .gql: GraphQL
+  .prisma: Prisma
+  .proto: Protocol Buffers
+
+  # Documentation
+  .md: Markdown
+  .markdown: Markdown
+  .rst: reStructuredText
+  .txt: Text
+  .adoc: AsciiDoc
+  .asciidoc: AsciiDoc
+  .org: Org
+  .tex: LaTeX
+
+  # Build/CI
+  .mk: Makefile
+  .cmake: CMake
+  .gradle: Gradle
+  .dockerfile: Dockerfile
+  .containerfile: Dockerfile
+
+  # Other
+  .asm: Assembly
+  .s: Assembly
+  .sol: Solidity
+  .vy: Vyper
+  .move: Move
+  .wasm: WebAssembly
+  .wat: WebAssembly
+
+# Framework detection from package/dependency files
+# Maps filename to framework name (only actual frameworks, not languages)
+framework_files:
+  pom.xml: Maven
+  build.gradle: Gradle
+  build.gradle.kts: Gradle
+  Cartfile: Carthage
+  Podfile: CocoaPods
+  Package.swift: Swift PM
+  mix.exs: Mix
+  rebar.config: Rebar3
+  stack.yaml: Haskell Stack
+  project.clj: Leiningen
+
+# Framework detection from dependency names in package.json
+js_frameworks:
+  react: React
+  vue: Vue.js
+  "@vue/compiler-sfc": Vue.js
+  angular: Angular
+  "@angular/core": Angular
+  svelte: Svelte
+  next: Next.js
+  nuxt: Nuxt.js
+  gatsby: Gatsby
+  remix: Remix
+  astro: Astro
+  express: Express
+  fastify: Fastify
+  nestjs: NestJS
+  "@nestjs/core": NestJS
+  koa: Koa
+  hapi: Hapi
+  fastify: Fastify
+  electron: Electron
+  react-native: React Native
+  expo: Expo
+
+# Framework detection from requirements.txt
+python_frameworks:
+  django: Django
+  flask: Flask
+  fastapi: FastAPI
+  tornado: Tornado
+  pyramid: Pyramid
+  bottle: Bottle
+  sanic: Sanic
+  starlette: Starlette
+  celery: Celery
+  aiohttp: AIOHTTP
+  falcon: Falcon
+  cherrypy: CherryPy
+  hug: Hug
+  quart: Quart
+
+# Framework detection from composer.json require section
+php_frameworks:
+  laravel/framework: Laravel
+  symfony/symfony: Symfony
+  symfony/console: Symfony
+  doctrine/orm: Doctrine
+  codeigniter4/framework: CodeIgniter
+  cakephp/cakephp: CakePHP
+  yiisoft/yii2: Yii2
+  slim/slim: Slim
+  lumen-framework: Lumen
+  fuel/fuel: FuelPHP
+  phalcon/incubulator: Phalcon
+  laravel/lumen-framework: Lumen
+
+# Ruby framework detection from Gemfile
+ruby_frameworks:
+  rails: Rails
+  sinatra: Sinatra
+  hanami: Hanami
+  padrino: Padrino
+  grape: Grape
+  roda: Roda
+  cuba: Cuba
+  camping: Camping
+
+# Go framework detection from go.mod
+go_frameworks:
+  gin-gonic/gin: Gin
+  gorilla/mux: Gorilla
+  echo: Echo
+  fiber: Fiber
+  chi: Chi
+  gofiber/fiber: Fiber
+  labstack/echo: Echo
+
+# Project file indicators for area type detection (monorepos)
+project_indicators:
+  package.json: frontend
+  composer.json: backend
+  pom.xml: backend
+  build.gradle: backend
+  build.gradle.kts: backend
+  requirements.txt: backend
+  pyproject.toml: backend
+  go.mod: backend
+  Cargo.toml: backend
+  Gemfile: backend
+
+# Monorepo directory patterns
+monorepo_patterns:
+  - apps
+  - packages
+  - libs
+  - services
+  - modules
+  - tools
+
+# Area type inference from directory names
+area_type_names:
+  frontend: frontend
+  web: frontend
+  client: frontend
+  ui: frontend
+  mobile: frontend
+  ios: frontend
+  android: frontend
+  backend: backend
+  api: backend
+  server: backend
+  service: backend
+  shared: shared
+  common: shared
+  lib: shared
+  core: shared
+  utils: shared
 
 # Binary file extensions to exclude
 binary_extensions:
@@ -12,22 +273,40 @@ binary_extensions:
   - .ico
   - .webp
   - .tiff
+  - .tif
   - .psd
   - .ai
-  - .svg
+  - .eps
+  - .raw
+  - .cr2
+  - .nef
+  - .heic
+  - .heif
+  - .avif
+  - .jxl
 
-  # Audio/Video
+  # Audio
   - .mp3
-  - .mp4
   - .wav
+  - .ogg
+  - .flac
+  - .aac
+  - .m4a
+  - .wma
+  - .opus
+
+  # Video
+  - .mp4
   - .avi
   - .mov
   - .wmv
   - .flv
   - .mkv
   - .webm
-  - .ogg
-  - .flac
+  - .m4v
+  - .mpeg
+  - .mpg
+  - .3gp
 
   # Archives
   - .zip
@@ -38,6 +317,8 @@ binary_extensions:
   - .rar
   - .7z
   - .tgz
+  - .tbz2
+  - .zst
 
   # Executables
   - .exe
@@ -46,16 +327,23 @@ binary_extensions:
   - .dylib
   - .app
   - .dmg
+  - .deb
+  - .rpm
+  - .msi
 
   # Compiled
   - .pyc
   - .pyo
+  - .pyd
   - .class
   - .jar
   - .war
+  - .ear
   - .o
+  - .obj
   - .a
   - .lib
+  - .wasm
 
   # Fonts
   - .ttf
@@ -63,6 +351,7 @@ binary_extensions:
   - .woff
   - .woff2
   - .eot
+  - .ttc
 
   # Documents
   - .pdf
@@ -70,6 +359,17 @@ binary_extensions:
   - .docx
   - .xls
   - .xlsx
+  - .ppt
+  - .pptx
+  - .odt
+  - .ods
+  - .odp
+
+  # Database
+  - .db
+  - .sqlite
+  - .sqlite3
+  - .mdb
 
 # Generated file patterns to exclude
 generated_patterns:
@@ -80,44 +380,76 @@ generated_patterns:
   - composer.lock
   - cargo.lock
   - poetry.lock
+  - pdm.lock
   - gemfile.lock
   - pipfile.lock
+  - uv.lock
 
   # Minified files
   - "*.min.js"
   - "*.min.css"
+  - "*.min.mjs"
+
+  # Source maps
+  - "*.map"
 
   # Generated code
   - "*.pb.go"
   - "*.pb.rs"
+  - "*.pb.cc"
+  - "*.pb.h"
   - "*_pb2.py"
+  - "*_pb2_grpc.py"
+  - "*.grpc.pb.go"
   - "*.d.ts"
+
+  # Build outputs
+  - "*.o"
+  - "*.pyc"
+  - "*.pyo"
+  - "*.class"
 
   # IDE/OS files
   - .DS_Store
   - thumbs.db
+  - desktop.ini
 
 # Directories to ignore when scanning
 ignore_directories:
   - node_modules
   - .venv
   - venv
+  - env
   - __pycache__
   - .git
+  - .hg
+  - .svn
   - dist
   - build
   - target
+  - out
   - .idea
   - .vscode
   - vendor
   - .tox
   - .pytest_cache
   - .mypy_cache
+  - .ruff_cache
   - htmlcov
   - .eggs
   - "*.egg-info"
+  - .next
+  - .nuxt
+  - .cache
+  - coverage
+  - .coverage
+  - bundle
+  - Pods
+  - DerivedData
+  - .gradle
+  - vendor/bundle
 
-# Core module patterns (higher importance)
+# Core module patterns (higher importance for expertise scoring)
 core_module_patterns:
   - "*/models/*"
   - "*/core/*"
@@ -126,12 +458,19 @@ core_module_patterns:
   - "*/app/*"
   - "*/main.*"
   - "*/index.*"
+  - "*/controllers/*"
+  - "*/services/*"
+  - "*/domain/*"
 
-# Peripheral module patterns (lower importance)
+# Peripheral module patterns (lower importance for expertise scoring)
 peripheral_module_patterns:
   - "*/test*"
   - "*/tests/*"
+  - "*/spec*"
+  - "*/specs/*"
   - "*/docs/*"
   - "*/examples/*"
   - "*/scripts/*"
   - "*/config/*"
+  - "*/migrations/*"
+  - "*/seeds/*"

@@ -14,6 +14,7 @@ from git_prism.analyzer.classification import (
     classify_file,
     classify_repository,
     detect_frameworks,
+    detect_fullstack_areas,
     detect_monorepo_structure,
 )
 from git_prism.analyzer.commits import CommitInfo, stream_commits
@@ -90,6 +91,14 @@ class Analyzer:
         # Detect monorepo structure
         monorepo_info = detect_monorepo_structure(repo.path)
 
+        # Detect fullstack areas if not a monorepo
+        fullstack_info = None
+        if monorepo_info is None:
+            fullstack_info = detect_fullstack_areas(repo.path)
+
+        # Combined area info for file tracking
+        area_info = monorepo_info or fullstack_info
+
         # Stream and process commits
         contributors: dict[tuple[str, str], Contributor] = {}
 
@@ -117,19 +126,22 @@ class Analyzer:
                 # Update contributor stats
                 contributors[key].add_commit(commit)
 
-                # Track files by area if monorepo
-                if monorepo_info:
+                # Track files by area if monorepo or fullstack
+                if area_info:
                     for file_path in commit.files:
-                        area = self._determine_file_area(file_path, monorepo_info.areas)
+                        if monorepo_info:
+                            area = self._determine_file_area(file_path, monorepo_info.areas)
+                        else:
+                            area = self._determine_fullstack_file_area(file_path)
                         contributors[key].add_file_to_area(file_path, area)
 
         # Calculate expertise scores
         scores = calculate_expertise_scores(contributors)
 
-        # Calculate per-area scores if monorepo
+        # Calculate per-area scores if monorepo or fullstack
         area_scores: dict[str, list[ExpertiseScore]] = {}
-        if monorepo_info:
-            for area_def in monorepo_info.areas:
+        if area_info:
+            for area_def in area_info.areas:
                 area_scores[area_def.name] = calculate_area_expertise_scores(
                     list(contributors.values()),
                     area_def.name,
@@ -156,7 +168,7 @@ class Analyzer:
             contributors=list(contributors.values()),
             scores=scores,
             classification=classification,
-            area_scores=area_scores if monorepo_info else None,
+            area_scores=area_scores if area_info else None,
         )
 
     def _determine_file_area(
@@ -184,6 +196,39 @@ class Analyzer:
         # Root-level files go to shared
         if file_path.startswith((".", "_")) or "/" not in file_path:
             return "shared"
+
+        return None
+
+    def _determine_fullstack_file_area(self, file_path: str) -> str | None:
+        """Determine which fullstack area a file belongs to.
+
+        Maps Laravel directory structure to frontend/backend areas.
+
+        Args:
+            file_path: Path to the file.
+
+        Returns:
+            "frontend", "backend", or None.
+        """
+        # Backend: Laravel PHP directories
+        backend_prefixes = ["app/", "routes/", "config/", "database/", "tests/", "bootstrap/"]
+        for prefix in backend_prefixes:
+            if file_path.startswith(prefix):
+                return "backend"
+
+        # Frontend: resources/js, resources/css, resources/views (Blade/Vue)
+        frontend_prefixes = ["resources/js/", "resources/css/", "resources/views/"]
+        for prefix in frontend_prefixes:
+            if file_path.startswith(prefix):
+                return "frontend"
+
+        # Check by file extension in resources
+        if file_path.startswith("resources/"):
+            ext = file_path.split(".")[-1] if "." in file_path else ""
+            if ext in {"js", "vue", "ts", "tsx", "css", "scss", "sass"}:
+                return "frontend"
+            if ext in {"php"}:
+                return "backend"
 
         return None
 

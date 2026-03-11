@@ -7,8 +7,38 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from git_prism.config import (
+    get_area_type_names,
+    get_binary_extensions,
+    get_framework_detection,
+    get_language_map,
+    get_monorepo_patterns,
+    get_project_indicators,
+)
+
 if TYPE_CHECKING:
     from git_prism.analyzer.filters import FileFilter
+
+
+# Cached config values (loaded once)
+_cached_language_map: dict[str, str] | None = None
+_cached_binary_extensions: set[str] | None = None
+
+
+def _get_cached_language_map() -> dict[str, str]:
+    """Get cached language map from config."""
+    global _cached_language_map
+    if _cached_language_map is None:
+        _cached_language_map = get_language_map()
+    return _cached_language_map
+
+
+def _get_cached_binary_extensions() -> set[str]:
+    """Get cached binary extensions from config."""
+    global _cached_binary_extensions
+    if _cached_binary_extensions is None:
+        _cached_binary_extensions = get_binary_extensions()
+    return _cached_binary_extensions
 
 
 class FileType(Enum):
@@ -109,6 +139,7 @@ class RepoClassification:
         primary_language: Most common language by file count.
         total_files: Total number of files classified.
         is_monorepo: Whether the repository is a monorepo.
+        is_fullstack: Whether the repository is a fullstack app (single app with frontend + backend).
         monorepo_info: Monorepo detection info (if monorepo).
         areas: Per-area classification stats.
     """
@@ -119,108 +150,12 @@ class RepoClassification:
     primary_language: str = "None"
     total_files: int = 0
     is_monorepo: bool = False
+    is_fullstack: bool = False
     monorepo_info: MonorepoInfo | None = None
     areas: dict[str, AreaClassification] = field(default_factory=dict)
 
 
-# Language detection by extension
-LANGUAGE_MAP: dict[str, str] = {
-    # Frontend
-    ".js": "JavaScript",
-    ".jsx": "JavaScript",
-    ".ts": "TypeScript",
-    ".tsx": "TypeScript",
-    ".vue": "Vue",
-    ".svelte": "Svelte",
-    ".html": "HTML",
-    ".css": "CSS",
-    ".scss": "SCSS",
-    ".sass": "Sass",
-    ".less": "Less",
-    # Backend
-    ".py": "Python",
-    ".rb": "Ruby",
-    ".go": "Go",
-    ".rs": "Rust",
-    ".java": "Java",
-    ".kt": "Kotlin",
-    ".scala": "Scala",
-    ".php": "PHP",
-    ".cs": "C#",
-    ".swift": "Swift",
-    ".m": "Objective-C",
-    ".mm": "Objective-C++",
-    ".c": "C",
-    ".cpp": "C++",
-    ".cc": "C++",
-    ".cxx": "C++",
-    ".h": "C/C++ Header",
-    ".hpp": "C++ Header",
-    ".ex": "Elixir",
-    ".exs": "Elixir",
-    ".erl": "Erlang",
-    ".hs": "Haskell",
-    ".clj": "Clojure",
-    ".lisp": "Lisp",
-    ".lua": "Lua",
-    ".r": "R",
-    ".jl": "Julia",
-    # Data
-    ".json": "JSON",
-    ".yaml": "YAML",
-    ".yml": "YAML",
-    ".toml": "TOML",
-    ".xml": "XML",
-    ".sql": "SQL",
-    ".graphql": "GraphQL",
-    ".proto": "Protocol Buffers",
-    # Config
-    ".ini": "INI",
-    ".cfg": "Config",
-    ".conf": "Config",
-    ".env": "Environment",
-    ".sh": "Shell",
-    ".bash": "Bash",
-    ".zsh": "Zsh",
-    ".ps1": "PowerShell",
-    ".bat": "Batch",
-    # Documentation
-    ".md": "Markdown",
-    ".rst": "reStructuredText",
-    ".txt": "Text",
-    ".adoc": "AsciiDoc",
-    # Build
-    ".mk": "Makefile",
-    ".cmake": "CMake",
-    ".gradle": "Gradle",
-    ".maven": "Maven",
-    ".dockerfile": "Dockerfile",
-}
-
-# Framework detection patterns
-FRAMEWORK_FILES: dict[str, str] = {
-    "package.json": "Node.js",
-    "requirements.txt": "Python",
-    "Pipfile": "Python (Pipenv)",
-    "pyproject.toml": "Python",
-    "Gemfile": "Ruby",
-    "go.mod": "Go",
-    "Cargo.toml": "Rust",
-    "pom.xml": "Java (Maven)",
-    "build.gradle": "Java (Gradle)",
-    "composer.json": "PHP",
-    "packages.config": ".NET",
-    "*.csproj": ".NET",
-    "Cartfile": "iOS (Carthage)",
-    "Podfile": "iOS (CocoaPods)",
-    "Package.swift": "Swift",
-    "mix.exs": "Elixir",
-    "rebar.config": "Erlang",
-    "stack.yaml": "Haskell (Stack)",
-    "project.clj": "Clojure (Leiningen)",
-}
-
-# Frontend file patterns
+# Frontend file patterns (for directory-based detection)
 FRONTEND_PATTERNS = {
     "components",
     "views",
@@ -231,12 +166,9 @@ FRONTEND_PATTERNS = {
     "static",
     "__tests__",
     "__mocks__",
-    ".test.",
-    ".spec.",
-    ".stories.",
 }
 
-# Backend file patterns
+# Backend file patterns (for directory-based detection)
 BACKEND_PATTERNS = {
     "models",
     "controllers",
@@ -274,8 +206,9 @@ def classify_file(
     name = path.name.lower()
     parent = path.parent.name.lower()
 
-    # Detect language
-    language = LANGUAGE_MAP.get(extension, "unknown")
+    # Detect language from config
+    language_map = get_language_map()
+    language = language_map.get(extension, "unknown")
 
     # Detect file type
     file_type = FileType.UNKNOWN
@@ -285,18 +218,18 @@ def classify_file(
         file_type = FileType.TEST
 
     # Documentation
-    elif extension in {".md", ".rst", ".txt", ".adoc"}:
+    elif extension in {".md", ".rst", ".txt", ".adoc", ".asciidoc", ".org"}:
         file_type = FileType.DOCUMENTATION
 
     # Config files
-    elif extension in {".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env"}:
+    elif extension in {".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env", ".properties"}:
         if name in {"package.json", "tsconfig.json", "pyproject.toml"}:
             file_type = FileType.BUILD
         else:
             file_type = FileType.CONFIG
 
     # Build files
-    elif name in {"makefile", "dockerfile", "rakefile", "gemfile"} or extension in {
+    elif name in {"makefile", "dockerfile", "rakefile", "gemfile", "containerfile"} or extension in {
         ".mk",
         ".cmake",
         ".gradle",
@@ -304,7 +237,7 @@ def classify_file(
         file_type = FileType.BUILD
 
     # Frontend
-    elif extension in {".jsx", ".tsx", ".vue", ".svelte", ".css", ".scss", ".sass", ".less"} or extension in {".js", ".ts"} and any(p in str(path).lower() for p in FRONTEND_PATTERNS):
+    elif extension in {".jsx", ".tsx", ".vue", ".svelte", ".css", ".scss", ".sass", ".less", ".styl"} or extension in {".js", ".ts"} and any(p in str(path).lower() for p in FRONTEND_PATTERNS):
         file_type = FileType.FRONTEND
 
     # Backend
@@ -312,7 +245,7 @@ def classify_file(
         file_type = FileType.BACKEND
 
     # Data files
-    elif extension in {".sql", ".graphql", ".proto"}:
+    elif extension in {".sql", ".graphql", ".gql", ".proto", ".prisma"}:
         file_type = FileType.DATA
 
     # Check if generated
@@ -419,7 +352,7 @@ def _is_generated_file(path: Path, content: str | None = None) -> bool:
 def detect_frameworks(repo_path: str | Path) -> list[str]:
     """Detect frameworks used in a repository.
 
-    Scans for common framework indicator files.
+    Scans for common framework indicator files and dependencies.
 
     Args:
         repo_path: Path to the git repository.
@@ -430,8 +363,12 @@ def detect_frameworks(repo_path: str | Path) -> list[str]:
     path = Path(repo_path) if isinstance(repo_path, str) else repo_path
     frameworks: list[str] = []
 
+    # Get framework detection config
+    framework_config = get_framework_detection()
+    framework_files = framework_config.get("framework_files", {})
+
     # Check for framework indicator files
-    for indicator, framework in FRAMEWORK_FILES.items():
+    for indicator, framework in framework_files.items():
         if indicator.startswith("*"):
             # Glob pattern
             if list(path.glob(indicator)):
@@ -449,21 +386,7 @@ def detect_frameworks(repo_path: str | Path) -> list[str]:
                 data = json.load(f)
 
             deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
-
-            js_frameworks = {
-                "react": "React",
-                "vue": "Vue.js",
-                "angular": "Angular",
-                "@angular/core": "Angular",
-                "svelte": "Svelte",
-                "next": "Next.js",
-                "nuxt": "Nuxt.js",
-                "gatsby": "Gatsby",
-                "express": "Express.js",
-                "fastify": "Fastify",
-                "nestjs": "NestJS",
-                "django": "Django",  # In case it's a monorepo
-            }
+            js_frameworks = framework_config.get("js_frameworks", {})
 
             for dep, name in js_frameworks.items():
                 if dep in deps:
@@ -477,17 +400,51 @@ def detect_frameworks(repo_path: str | Path) -> list[str]:
     if requirements.exists():
         try:
             content = requirements.read_text().lower()
-            py_frameworks = {
-                "django": "Django",
-                "flask": "Flask",
-                "fastapi": "FastAPI",
-                "tornado": "Tornado",
-                "pyramid": "Pyramid",
-                "bottle": "Bottle",
-                "sanic": "Sanic",
-                "starlette": "Starlette",
-            }
+            py_frameworks = framework_config.get("python_frameworks", {})
             for dep, name in py_frameworks.items():
+                if dep in content:
+                    frameworks.append(name)
+        except OSError:
+            pass
+
+    # Check composer.json for PHP frameworks (Laravel, etc.)
+    composer_json = path / "composer.json"
+    if composer_json.exists():
+        try:
+            import json
+
+            with open(composer_json) as f:
+                data = json.load(f)
+
+            deps = {**data.get("require", {}), **data.get("require-dev", {})}
+            php_frameworks = framework_config.get("php_frameworks", {})
+
+            for dep, name in php_frameworks.items():
+                if dep in deps:
+                    frameworks.append(name)
+
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Check Gemfile for Ruby frameworks
+    gemfile = path / "Gemfile"
+    if gemfile.exists():
+        try:
+            content = gemfile.read_text().lower()
+            ruby_frameworks = framework_config.get("ruby_frameworks", {})
+            for dep, name in ruby_frameworks.items():
+                if dep in content:
+                    frameworks.append(name)
+        except OSError:
+            pass
+
+    # Check go.mod for Go frameworks
+    go_mod = path / "go.mod"
+    if go_mod.exists():
+        try:
+            content = go_mod.read_text().lower()
+            go_frameworks = framework_config.get("go_frameworks", {})
+            for dep, name in go_frameworks.items():
                 if dep in content:
                     frameworks.append(name)
         except OSError:
@@ -503,43 +460,20 @@ def detect_frameworks(repo_path: str | Path) -> list[str]:
 # Minimum number of areas to consider a repo a monorepo
 MIN_MONOREPO_AREAS = 2
 
-# Project file indicators and their inferred area type
-PROJECT_INDICATORS: dict[str, str] = {
-    "package.json": "frontend",
-    "pom.xml": "backend",
-    "build.gradle": "backend",
-    "build.gradle.kts": "backend",
-    "requirements.txt": "backend",
-    "pyproject.toml": "backend",
-    "go.mod": "backend",
-    "Cargo.toml": "backend",
-    "Gemfile": "backend",
-}
 
-# Common monorepo directory patterns
-MONOREPO_DIR_PATTERNS: list[str] = [
-    "apps",
-    "packages",
-    "libs",
-    "services",
-    "modules",
-]
+def _get_project_indicators() -> dict[str, str]:
+    """Get project indicators from config."""
+    return get_project_indicators()
 
-# Common area names that indicate type
-AREA_TYPE_NAMES: dict[str, str] = {
-    "frontend": "frontend",
-    "web": "frontend",
-    "client": "frontend",
-    "ui": "frontend",
-    "backend": "backend",
-    "api": "backend",
-    "server": "backend",
-    "service": "backend",
-    "shared": "shared",
-    "common": "shared",
-    "lib": "shared",
-    "core": "shared",
-}
+
+def _get_monorepo_patterns() -> list[str]:
+    """Get monorepo patterns from config."""
+    return get_monorepo_patterns()
+
+
+def _get_area_type_names() -> dict[str, str]:
+    """Get area type names from config."""
+    return get_area_type_names()
 
 
 def detect_monorepo_structure(repo_path: str | Path) -> MonorepoInfo | None:
@@ -595,6 +529,13 @@ def detect_monorepo_structure(repo_path: str | Path) -> MonorepoInfo | None:
         areas = _parse_package_json_workspaces(path)
         if len(areas) >= MIN_MONOREPO_AREAS:
             return MonorepoInfo(detection_source="package.json", areas=areas)
+
+    # Check composer.json autoload paths for packages
+    composer_json = path / "composer.json"
+    if composer_json.exists():
+        areas = _parse_composer_autoload_packages(path)
+        if len(areas) >= MIN_MONOREPO_AREAS:
+            return MonorepoInfo(detection_source="composer.json:autoload", areas=areas)
 
     # 2. Detect areas by scanning subdirectories for project indicators
     areas = _detect_areas_by_project_indicators(path)
@@ -753,6 +694,60 @@ def _parse_package_json_workspaces(repo_path: Path) -> list[AreaDefinition]:
     return areas
 
 
+def _parse_composer_autoload_packages(repo_path: Path) -> list[AreaDefinition]:
+    """Parse composer.json autoload paths for local packages.
+
+    Detects monorepo structure from PSR-4 autoload paths like:
+    "Baander\\RedisStack\\": "packages/redis-stack/src/"
+
+    Args:
+        repo_path: Path to the repository root.
+
+    Returns:
+        List of detected area definitions.
+    """
+    import json
+
+    areas: list[AreaDefinition] = []
+
+    try:
+        with open(repo_path / "composer.json") as f:
+            config = json.load(f)
+
+        # Check autoload and autoload-dev
+        autoload_sections = [
+            config.get("autoload", {}).get("psr-4", {}),
+            config.get("autoload-dev", {}).get("psr-4", {}),
+        ]
+
+        for autoload in autoload_sections:
+            for namespace, path in autoload.items():
+                if not isinstance(path, str):
+                    continue
+
+                # Look for packages/* or similar monorepo patterns
+                for pattern in _get_monorepo_patterns():
+                    if path.startswith(f"{pattern}/"):
+                        # Extract area name: packages/redis-stack/src/ -> redis-stack
+                        parts = path.split("/")
+                        if len(parts) >= 2:
+                            area_dir = parts[1]
+                            area_path = repo_path / pattern / area_dir
+
+                            if area_path.is_dir():
+                                area_type = _infer_area_type(area_dir, area_path)
+                                areas.append(AreaDefinition(
+                                    name=_normalize_area_name(area_dir),
+                                    path_pattern=f"{pattern}/{area_dir}/**",
+                                    area_type=area_type,
+                                    detected_from="composer.json:autoload",
+                                ))
+    except (json.JSONDecodeError, OSError):
+        pass
+
+    return areas
+
+
 def _detect_areas_by_project_indicators(repo_path: Path) -> list[AreaDefinition]:
     """Detect areas by checking subdirectories for project indicator files.
 
@@ -761,13 +756,14 @@ def _detect_areas_by_project_indicators(repo_path: Path) -> list[AreaDefinition]
     an indicator of project type.
     """
     areas: list[AreaDefinition] = []
+    project_indicators = _get_project_indicators()
 
     for item in repo_path.iterdir():
         if not item.is_dir() or item.name.startswith("."):
             continue
 
         # Check for project indicator files in this SUBDIRECTORY
-        for indicator, area_type in PROJECT_INDICATORS.items():
+        for indicator, area_type in project_indicators.items():
             if (item / indicator).exists():
                 areas.append(AreaDefinition(
                     name=_normalize_area_name(item.name),
@@ -783,8 +779,10 @@ def _detect_areas_by_project_indicators(repo_path: Path) -> list[AreaDefinition]
 def _detect_area_directories(repo_path: Path) -> list[AreaDefinition]:
     """Detect areas by common monorepo directory patterns."""
     areas: list[AreaDefinition] = []
+    monorepo_patterns = _get_monorepo_patterns()
+    area_type_names = _get_area_type_names()
 
-    for pattern_dir in MONOREPO_DIR_PATTERNS:
+    for pattern_dir in monorepo_patterns:
         pattern_path = repo_path / pattern_dir
         if not pattern_path.is_dir():
             continue
@@ -802,7 +800,7 @@ def _detect_area_directories(repo_path: Path) -> list[AreaDefinition]:
             ))
 
     # Also check for top-level frontend/backend/shared directories
-    for dir_name, area_type in AREA_TYPE_NAMES.items():
+    for dir_name, area_type in area_type_names.items():
         dir_path = repo_path / dir_name
         if dir_path.is_dir():
             areas.append(AreaDefinition(
@@ -826,14 +824,16 @@ def _infer_area_type(name: str, path: Path) -> str:
         Inferred area type: "frontend", "backend", or "shared".
     """
     name_lower = name.lower()
+    area_type_names = _get_area_type_names()
+    project_indicators = _get_project_indicators()
 
     # Check name patterns
-    for pattern, area_type in AREA_TYPE_NAMES.items():
+    for pattern, area_type in area_type_names.items():
         if pattern in name_lower:
             return area_type
 
     # Check for project indicators
-    for indicator, area_type in PROJECT_INDICATORS.items():
+    for indicator, area_type in project_indicators.items():
         if (path / indicator).exists():
             return area_type
 
@@ -862,6 +862,154 @@ def _normalize_area_name(name: str) -> str:
         name = re.sub(r"^@[^/]+/", "", name)
 
     return name
+
+
+def detect_fullstack(repo_path: Path, classification: RepoClassification) -> bool:
+    """Detect if a repo is fullstack (single app with frontend + backend).
+
+    Specifically detects Laravel + Vue.js fullstack applications.
+
+    Args:
+        repo_path: Path to the repository root.
+        classification: Current classification (to check if monorepo).
+
+    Returns:
+        True if fullstack app detected, False otherwise.
+    """
+    # Must not already be a monorepo
+    if classification.is_monorepo:
+        return False
+
+    # Check for both PHP (backend) and JS (frontend) at root level
+    has_php_backend = (repo_path / "composer.json").exists()
+    has_js_frontend = (repo_path / "package.json").exists()
+
+    if not (has_php_backend and has_js_frontend):
+        return False
+
+    # Check for Laravel-specific indicators
+    has_laravel = (repo_path / "artisan").exists()
+    if not has_laravel:
+        return False
+
+    # Check for frontend build tools
+    has_vite = any([
+        (repo_path / "vite.config.js").exists(),
+        (repo_path / "vite.config.ts").exists(),
+        (repo_path / "vite.config.mjs").exists(),
+        (repo_path / "vite.config.mts").exists(),
+    ])
+    has_mix = (repo_path / "webpack.mix.js").exists()
+
+    # Check for frontend source in resources/js
+    resources_js = repo_path / "resources" / "js"
+    has_frontend_src = False
+    if resources_js.exists():
+        try:
+            has_frontend_src = any(
+                f.suffix in {".js", ".vue", ".ts", ".tsx"}
+                for f in resources_js.rglob("*")
+                if f.is_file()
+            )
+        except OSError:
+            pass
+
+    return has_vite or has_mix or has_frontend_src
+
+
+def detect_fullstack_areas(repo_path: Path) -> MonorepoInfo | None:
+    """Detect frontend/backend areas for Laravel fullstack applications.
+
+    Creates virtual areas based on Laravel's standard directory structure:
+    - Backend: app/, routes/, config/, database/, tests/
+    - Frontend: resources/js/, resources/css/
+
+    Args:
+        repo_path: Path to the repository root.
+
+    Returns:
+        MonorepoInfo with frontend/backend areas, or None if not a Laravel fullstack app.
+    """
+    # Must be Laravel
+    if not (repo_path / "artisan").exists():
+        return None
+
+    # Must have frontend indicators
+    has_package_json = (repo_path / "package.json").exists()
+    resources_js = repo_path / "resources" / "js"
+    has_frontend_src = resources_js.exists()
+
+    if not (has_package_json or has_frontend_src):
+        return None
+
+    areas: list[AreaDefinition] = []
+
+    # Backend area: PHP files in Laravel directories
+    backend_patterns = ["app/**", "routes/**", "config/**", "database/**", "tests/**"]
+    has_backend = any(
+        (repo_path / pattern.split("/")[0]).exists()
+        for pattern in backend_patterns
+    )
+    if has_backend:
+        areas.append(AreaDefinition(
+            name="backend",
+            path_pattern="backend/**",  # Virtual pattern, matched by _determine_fullstack_file_area
+            area_type="backend",
+            detected_from="laravel-fullstack",
+        ))
+
+    # Frontend area: JS/Vue files in resources
+    frontend_patterns = ["resources/js/**", "resources/css/**"]
+    has_frontend = any(
+        (repo_path / p.split("/")[0] / p.split("/")[1]).exists()
+        for p in frontend_patterns
+    )
+    if has_frontend:
+        areas.append(AreaDefinition(
+            name="frontend",
+            path_pattern="frontend/**",  # Virtual pattern
+            area_type="frontend",
+            detected_from="laravel-fullstack",
+        ))
+
+    if len(areas) >= 2:
+        return MonorepoInfo(detection_source="laravel-fullstack", areas=areas)
+
+    return None
+
+
+def _determine_fullstack_file_area(file_path: str) -> str | None:
+    """Determine which fullstack area a file belongs to.
+
+    Maps Laravel directory structure to frontend/backend areas.
+
+    Args:
+        file_path: Relative path to the file.
+
+    Returns:
+        "frontend", "backend", or None.
+    """
+    # Backend: Laravel PHP directories
+    backend_prefixes = ["app/", "routes/", "config/", "database/", "tests/", "bootstrap/"]
+    for prefix in backend_prefixes:
+        if file_path.startswith(prefix):
+            return "backend"
+
+    # Frontend: resources/js, resources/css, resources/views (Blade/Vue)
+    frontend_prefixes = ["resources/js/", "resources/css/", "resources/views/"]
+    for prefix in frontend_prefixes:
+        if file_path.startswith(prefix):
+            return "frontend"
+
+    # Check by file extension in resources
+    if file_path.startswith("resources/"):
+        ext = file_path.split(".")[-1] if "." in file_path else ""
+        if ext in {"js", "vue", "ts", "tsx", "css", "scss", "sass"}:
+            return "frontend"
+        if ext in {"php"}:
+            return "backend"
+
+    return None
 
 
 def classify_repository(
@@ -898,10 +1046,18 @@ def classify_repository(
     if monorepo_info is None:
         monorepo_info = detect_monorepo_structure(path)
 
-    # Initialize area classifications if monorepo
+    # Detect fullstack areas if not a monorepo
+    fullstack_info: MonorepoInfo | None = None
+    is_fullstack = False
+    if monorepo_info is None:
+        fullstack_info = detect_fullstack_areas(path)
+        is_fullstack = fullstack_info is not None
+
+    # Initialize area classifications if monorepo or fullstack
     areas: dict[str, AreaClassification] = {}
-    if monorepo_info:
-        for area_def in monorepo_info.areas:
+    area_source = monorepo_info or fullstack_info
+    if area_source:
+        for area_def in area_source.areas:
             areas[area_def.name] = AreaClassification(
                 area_name=area_def.name,
                 area_path=area_def.path_pattern,
@@ -912,17 +1068,19 @@ def classify_repository(
         if not file_path.is_file():
             continue
 
-        # Skip excluded files
+        # Skip excluded files - pass full path for binary detection
         relative_path = file_path.relative_to(path)
         rel_path_str = str(relative_path)
-        if not filter_.should_include(rel_path_str):
+        if not filter_.should_include(file_path):
             continue
 
         try:
-            # Classify with area if monorepo
+            # Classify with area if monorepo or fullstack
             area_name = None
             if monorepo_info:
                 area_name = _determine_file_area(rel_path_str, monorepo_info.areas)
+            elif fullstack_info:
+                area_name = _determine_fullstack_file_area(rel_path_str)
 
             classification = classify_file(file_path)
             classification.area = area_name
@@ -934,7 +1092,7 @@ def classify_repository(
             languages[classification.language] = languages.get(classification.language, 0) + 1
             file_types[classification.file_type] = file_types.get(classification.file_type, 0) + 1
 
-            # Aggregate by area if monorepo
+            # Aggregate by area if monorepo or fullstack
             if area_name and area_name in areas:
                 area_cls = areas[area_name]
                 area_cls.languages[classification.language] = area_cls.languages.get(classification.language, 0) + 1
@@ -951,7 +1109,7 @@ def classify_repository(
     primary_language = max(languages, key=languages.get) if languages else "None"
     total_files = sum(languages.values())
 
-    # Detect frameworks per area
+    # Detect frameworks per area (for monorepo)
     if monorepo_info and areas:
         for area_def in monorepo_info.areas:
             if area_def.name in areas:
@@ -962,16 +1120,33 @@ def classify_repository(
                 if area_path.exists():
                     area_cls.frameworks = detect_frameworks(area_path)
 
-    return RepoClassification(
+    # Detect frameworks per area (for fullstack)
+    if fullstack_info and areas:
+        if "backend" in areas:
+            # Backend frameworks from root (Laravel, etc.)
+            backend_frameworks = [f for f in frameworks if f in {"PHP", "Laravel"}]
+            areas["backend"].frameworks = backend_frameworks or ["PHP"]
+        if "frontend" in areas:
+            # Frontend frameworks from resources/js
+            resources_js = path / "resources" / "js"
+            if resources_js.exists():
+                areas["frontend"].frameworks = detect_frameworks(resources_js)
+            else:
+                areas["frontend"].frameworks = ["JavaScript"]
+
+    result = RepoClassification(
         languages=languages,
         file_types=file_types,
         frameworks=frameworks,
         primary_language=primary_language,
         total_files=total_files,
         is_monorepo=monorepo_info is not None,
+        is_fullstack=is_fullstack,
         monorepo_info=monorepo_info,
         areas=areas,
     )
+
+    return result
 
 
 def _determine_file_area(file_path: str, areas: list[AreaDefinition]) -> str | None:

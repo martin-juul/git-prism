@@ -106,6 +106,7 @@ class Analyzer:
             str(repo.path),
             batch_size=self.batch_size,
             max_commits=self.max_commits,
+            file_filter=self._file_filter,
         ):
             for commit in batch:
                 # Resolve to canonical identity

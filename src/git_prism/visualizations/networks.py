@@ -11,18 +11,25 @@ if TYPE_CHECKING:
     from git_prism.analyzer import AnalysisResult
 
 
-def _strip_bootstrap(html: str) -> str:
-    """Remove Bootstrap CSS/JS from Pyvis HTML to prevent theme conflicts.
+def _wrap_in_iframe(html: str | None, height: str = "100%") -> str:
+    """Wrap Pyvis HTML in an iframe to isolate it from the main document.
 
-    Pyvis includes Bootstrap unconditionally, which overrides dark theme styles.
-    The vis-network library works independently without Bootstrap.
+    Pyvis generate_html() returns a full HTML document. Embedding it directly
+    causes nested HTML structure issues. Using an iframe with srcdoc properly
+    isolates the Pyvis content.
+
+    Also removes Bootstrap CSS/JS to prevent theme conflicts.
 
     Args:
-        html: Raw HTML from Pyvis generate_html().
+        html: Full HTML document from Pyvis generate_html().
+        height: Iframe height (default 100%).
 
     Returns:
-        HTML with Bootstrap link/script tags removed.
+        Iframe element with Pyvis content, or empty string on failure.
     """
+    if not html or not html.strip():
+        return ""
+
     # Remove Bootstrap CSS link
     html = re.sub(
         r'<link[^>]*bootstrap[^>]*\.css[^>]*>',
@@ -37,7 +44,11 @@ def _strip_bootstrap(html: str) -> str:
         html,
         flags=re.IGNORECASE,
     )
-    return html
+
+    # Escape quotes for srcdoc attribute
+    escaped = html.replace('"', "&quot;")
+
+    return f'<iframe srcdoc="{escaped}" style="width: 100%; height: {height}; border: none;"></iframe>'
 
 
 def create_collaboration_network(
@@ -116,7 +127,7 @@ def create_collaboration_network(
     """
     )
 
-    return _strip_bootstrap(net.generate_html())
+    return _wrap_in_iframe(net.generate_html())
 
 
 def create_contributor_graph(
@@ -177,7 +188,7 @@ def create_contributor_graph(
     """
     )
 
-    html = _strip_bootstrap(net.generate_html())
+    html = _wrap_in_iframe(net.generate_html())
 
     if output_path:
         output_path.write_text(html)
@@ -257,4 +268,4 @@ def create_expertise_network(
     """
     )
 
-    return _strip_bootstrap(net.generate_html())
+    return _wrap_in_iframe(net.generate_html())

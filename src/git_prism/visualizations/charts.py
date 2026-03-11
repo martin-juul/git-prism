@@ -297,7 +297,7 @@ def create_language_distribution_chart(
 def create_filetype_chart(
     results: list[AnalysisResult],
 ) -> str:
-    """Create a stacked horizontal bar showing file type distribution per repo.
+    """Create a stacked horizontal bar showing file type percentage distribution per repo.
 
     Args:
         results: List of AnalysisResult objects with classification data.
@@ -309,33 +309,35 @@ def create_filetype_chart(
 
     import plotly.graph_objects as go
 
-    # Collect file type data per repo
+    # Collect file type data per repo (as percentages)
     repo_names = []
-    frontend_counts = []
-    backend_counts = []
-    data_counts = []
-    config_counts = []
-    test_counts = []
-    doc_counts = []
+    frontend_pcts = []
+    backend_pcts = []
+    data_pcts = []
+    config_pcts = []
+    test_pcts = []
+    doc_pcts = []
 
     file_type_order = [
-        (FileType.FRONTEND, frontend_counts),
-        (FileType.BACKEND, backend_counts),
-        (FileType.DATA, data_counts),
-        (FileType.CONFIG, config_counts),
-        (FileType.TEST, test_counts),
-        (FileType.DOCUMENTATION, doc_counts),
+        (FileType.FRONTEND, frontend_pcts),
+        (FileType.BACKEND, backend_pcts),
+        (FileType.DATA, data_pcts),
+        (FileType.CONFIG, config_pcts),
+        (FileType.TEST, test_pcts),
+        (FileType.DOCUMENTATION, doc_pcts),
     ]
 
     for result in results:
-        if not result.classification:
+        if not result.classification or result.classification.total_files == 0:
             continue
 
         repo_names.append(result.repo_name)
         ft = result.classification.file_types
+        total = result.classification.total_files
 
-        for file_type, counts_list in file_type_order:
-            counts_list.append(ft.get(file_type, 0))
+        for file_type, pcts_list in file_type_order:
+            count = ft.get(file_type, 0)
+            pcts_list.append((count / total) * 100)
 
     if not repo_names:
         return "<p>No file type data available</p>"
@@ -352,25 +354,27 @@ def create_filetype_chart(
     ]
 
     labels = ["Frontend", "Backend", "Data", "Config", "Test", "Docs"]
-    counts_lists = [frontend_counts, backend_counts, data_counts, config_counts, test_counts, doc_counts]
+    pcts_lists = [frontend_pcts, backend_pcts, data_pcts, config_pcts, test_pcts, doc_pcts]
 
-    for i, (label, counts, color) in enumerate(zip(labels, counts_lists, colors)):
+    for label, pcts, color in zip(labels, pcts_lists, colors):
         fig.add_trace(
             go.Bar(
                 name=label,
                 y=repo_names,
-                x=counts,
+                x=pcts,
                 orientation="h",
                 marker_color=color,
+                hovertemplate="%{x:.1f}%<extra></extra>",
             )
         )
 
     _apply_dark_theme(
         fig,
         title="File Type Distribution",
-        xaxis_title="Files",
+        xaxis_title="Percentage (%)",
         yaxis_title="",
         barmode="stack",
+        xaxis={"range": [0, 100]},
         height=max(300, len(repo_names) * 40),
         margin=dict(l=150, r=20, t=40, b=40),
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},

@@ -27,6 +27,7 @@ class Contributor:
         first_commit: Date of first commit.
         last_commit: Date of most recent commit.
         files_modified: Set of file paths this contributor has modified.
+        files_by_area: Mapping of area name to set of file paths.
     """
 
     canonical_name: str
@@ -38,6 +39,7 @@ class Contributor:
     first_commit: datetime | None = None
     last_commit: datetime | None = None
     files_modified: set[str] = field(default_factory=set)
+    files_by_area: dict[str, set[str]] = field(default_factory=dict)
 
     def add_commit(self, commit: CommitInfo) -> None:
         """Add a commit to this contributor's statistics.
@@ -56,6 +58,19 @@ class Contributor:
             self.last_commit = commit_time
 
         self.files_modified.update(commit.files)
+
+    def add_file_to_area(self, file_path: str, area: str | None) -> None:
+        """Track a file modification in a specific area.
+
+        Args:
+            file_path: Path to the modified file.
+            area: Area name (or None for shared/unknown).
+        """
+        if area is None:
+            area = "shared"
+        if area not in self.files_by_area:
+            self.files_by_area[area] = set()
+        self.files_by_area[area].add(file_path)
 
     @property
     def lines_changed(self) -> int:

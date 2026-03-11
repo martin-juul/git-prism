@@ -385,3 +385,144 @@ def create_filetype_chart(
     fig.update_layout(autosize=True)
 
     return fig.to_html(include_plotlyjs=False, full_html=False, config={"responsive": True})
+
+
+def create_area_distribution_chart(
+    results: list[AnalysisResult],
+) -> str:
+    """Create a chart showing contributor distribution across monorepo areas.
+
+    For each monorepo, shows how contributors and activity are distributed
+    across detected areas (frontend, backend, shared, etc.).
+
+    Args:
+        results: List of AnalysisResult objects with classification data.
+
+    Returns:
+        HTML string containing Plotly chart, or empty string if no monorepos.
+    """
+    import plotly.graph_objects as go
+
+    # Filter to monorepos only
+    monorepo_results = [
+        r for r in results
+        if r.classification and r.classification.is_monorepo
+    ]
+
+    if not monorepo_results:
+        return ""
+
+    fig = go.Figure()
+
+    # Collect area data
+    area_data: dict[str, dict[str, int]] = {}  # repo_name -> {area -> files}
+
+    for result in monorepo_results:
+        if not result.classification or not result.classification.areas:
+            continue
+
+        area_data[result.repo_name] = {}
+        for area_name, area_cls in result.classification.areas.items():
+            area_data[result.repo_name][area_name] = area_cls.total_files
+
+    if not area_data:
+        return ""
+
+    # Get all unique area names
+    all_areas = set()
+    for repo_areas in area_data.values():
+        all_areas.update(repo_areas.keys())
+
+    # Sort areas: frontend, backend, then alphabetically
+    def area_sort_key(name):
+        if name == "frontend":
+            return (0, name)
+        if name == "backend":
+            return (1, name)
+        if name == "shared":
+            return (2, name)
+        return (3, name)
+
+    sorted_areas = sorted(all_areas, key=area_sort_key)
+
+    # Create stacked bar chart
+    repo_names = list(area_data.keys())
+    colors = CHART_PALETTE
+
+    for i, area in enumerate(sorted_areas):
+        values = [area_data[repo].get(area, 0) for repo in repo_names]
+        color = colors[i % len(colors)]
+        fig.add_trace(
+            go.Bar(
+                name=area.title(),
+                y=repo_names,
+                x=values,
+                orientation="h",
+                marker_color=color,
+                hovertemplate=f"{area.title()}: %{{x}} files<extra></extra>",
+            )
+        )
+
+    _apply_dark_theme(
+        fig,
+        title="Monorepo Area Distribution",
+        xaxis_title="Files",
+        yaxis_title="",
+        barmode="stack",
+        height=max(300, len(repo_names) * 50),
+        margin=dict(l=150, r=20, t=40, b=40),
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        autosize=True,
+    )
+
+    return fig.to_html(include_plotlyjs=False, full_html=False, config={"responsive": True})
+
+
+def create_area_expertise_chart(
+    result: AnalysisResult,
+    area_name: str,
+    scores: list[ExpertiseScore],
+    top_n: int = 10,
+) -> str:
+    """Create a horizontal bar chart showing expertise scores for a specific area.
+
+    Args:
+        result: AnalysisResult for a single repository.
+        area_name: Name of the area to show scores for.
+        scores: List of ExpertiseScore objects for this area.
+        top_n: Number of top contributors to show.
+
+    Returns:
+        HTML string containing Plotly chart.
+    """
+    import plotly.graph_objects as go
+
+    if not scores:
+        return f"<p>No expertise data for {area_name}</p>"
+
+    # Take top N
+    top_scores = scores[:top_n]
+    names = [s.contributor_name for s in top_scores]
+    values = [s.total_score for s in top_scores]
+
+    fig = go.Figure(
+        go.Bar(
+            x=values,
+            y=names,
+            orientation="h",
+            marker_color=ACCENT_SECONDARY,
+            hovertemplate="%{x:.1f}<extra></extra>",
+        )
+    )
+
+    _apply_dark_theme(
+        fig,
+        title=f"{area_name.title()} Expertise",
+        xaxis_title="Score",
+        yaxis_title="",
+        height=max(250, len(names) * 30),
+        margin=dict(l=150, r=20, t=40, b=40),
+        autosize=True,
+    )
+
+    return fig.to_html(include_plotlyjs=False, full_html=False, config={"responsive": True})

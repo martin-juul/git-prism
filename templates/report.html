@@ -62,6 +62,19 @@
     </div>
 </section>
 
+{% if area_distribution_chart %}
+<!-- Monorepo Area Distribution -->
+<section class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <h2>Monorepo Area Distribution</h2>
+    </div>
+    <p class="subtitle">File distribution across detected areas in monorepos</p>
+    <div class="chart-container">
+        {{ area_distribution_chart | safe }}
+    </div>
+</section>
+{% endif %}
+
 <!-- Knowledge Gap & Code Rot -->
 <section class="grid grid-2" style="margin-bottom: 2rem;">
     <div class="card">
@@ -224,6 +237,53 @@
                 {% endfor %}
             </div>
             {% endif %}
+            {% if result.classification.is_monorepo and result.classification.areas %}
+            <div style="margin-top: 0.5rem;">
+                <span class="badge badge-primary">Monorepo</span>
+                {% for area_name in result.classification.areas.keys() %}
+                <span class="badge">{{ area_name }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if result.classification and result.classification.is_monorepo and result.area_scores %}
+        <!-- Per-Area Expertise -->
+        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+            <h3 style="font-size: 1rem; margin-bottom: 1rem;">Area-Specific Expertise</h3>
+            {% for area_name, area_scores in result.area_scores.items() %}
+            {% if area_scores %}
+            <div style="margin-bottom: 1.5rem;">
+                <h4 style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: capitalize;">
+                    {{ area_name }} ({{ area_scores | length }} contributors)
+                </h4>
+                <table style="font-size: 0.85rem;">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Contributor</th>
+                            <th>Score</th>
+                            <th>Files</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for score in area_scores[:5] %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ score.contributor_name }}</td>
+                            <td>{{ "%.1f" | format(score.total_score) }}</td>
+                            <td>
+                                {% set area_files = contributor_files_by_area[result.repo_name][score.contributor_name][area_name] if contributor_files_by_area else 0 %}
+                                {{ area_files }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            {% endfor %}
         </div>
         {% endif %}
     </div>

@@ -83,6 +83,10 @@ class ReportGenerator:
         collaboration_graph = create_collaboration_network(results)
         expertise_graph = create_expertise_network(results)
 
+        # Generate monorepo area distribution chart if any monorepos
+        from git_prism.visualizations.charts import create_area_distribution_chart
+        area_distribution_chart = create_area_distribution_chart(results)
+
         # Calculate summary statistics
         total_contributors = len({s.contributor_email for r in results for s in r.scores})
         total_commits = sum(sum(s.commit_count for s in r.scores) for r in results)
@@ -99,6 +103,15 @@ class ReportGenerator:
             key=lambda r: sum(s.total_score for s in r.scores),
             reverse=True,
         )
+
+        # Build contributor files by area mapping for template
+        contributor_files_by_area: dict[str, dict[str, dict[str, int]]] = {}
+        for result in results:
+            contributor_files_by_area[result.repo_name] = {}
+            for contributor in result.contributors:
+                contributor_files_by_area[result.repo_name][contributor.canonical_name] = {
+                    area: len(files) for area, files in contributor.files_by_area.items()
+                }
 
         # Render template
         template = self.env.get_template("report.html")
@@ -119,6 +132,8 @@ class ReportGenerator:
             timeline_chart=timeline_chart,
             collaboration_graph=collaboration_graph,
             expertise_graph=expertise_graph,
+            area_distribution_chart=area_distribution_chart,
+            contributor_files_by_area=contributor_files_by_area,
         )
 
         # Write output

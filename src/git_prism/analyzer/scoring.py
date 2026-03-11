@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -59,6 +59,7 @@ class ExpertiseScore:
         recency_score: Weighted recency of contributions.
         complexity_score: Average complexity of code touched.
         file_importance_score: Importance of files modified.
+        area_scores: Per-area expertise scores (area_name -> score).
     """
 
     contributor_name: str
@@ -69,6 +70,7 @@ class ExpertiseScore:
     recency_score: float = 0.0
     complexity_score: float = 0.0
     file_importance_score: float = 0.0
+    area_scores: dict[str, float] = field(default_factory=dict)
 
 
 def calculate_expertise_scores(
@@ -207,3 +209,92 @@ def calculate_knowledge_distribution(
         "top_contributor_share": round(top_share, 1),
         "bus_factor": max(1, bus_factor),
     }
+
+
+def calculate_area_expertise_scores(
+    contributors: list[Contributor],
+    area: str,
+    weights: dict[str, float] | None = None,
+) -> list[ExpertiseScore]:
+    """Calculate expertise scores for a specific area.
+
+    Uses the same scoring algorithm as calculate_expertise_scores but
+    scoped to files in the specified area.
+
+    Args:
+        contributors: List of Contributor objects.
+        area: Area name to calculate scores for.
+        weights: Custom scoring weights (uses defaults if None).
+
+    Returns:
+        List of ExpertiseScore objects for contributors with activity in this area.
+    """
+    if weights is None:
+        weights = DEFAULT_WEIGHTS
+
+    if not contributors:
+        return []
+
+    # Filter to contributors with files in this area
+    area_contributors = [
+        c for c in contributors
+        if area in c.files_by_area and c.files_by_area[area]
+    ]
+
+    if not area_contributors:
+        return []
+
+    # Find max values for normalization (area-scoped)
+    max_lines = max(
+        c.total_insertions + c.total_deletions for c in area_contributors
+    ) or 1
+    max_commits = max(c.commit_count for c in area_contributors) or 1
+
+    scores: list[ExpertiseScore] = []
+
+    for contributor in area_contributors:
+        # Calculate weighted lines changed (area-scoped)
+        lines_score = 0.0
+        if contributor.last_commit:
+            recency = recency_decay(contributor.last_commit)
+            lines = contributor.total_insertions + contributor.total_deletions
+            lines_score = (lines / max_lines) * recency
+
+        # Calculate weighted commit frequency
+        commit_score = 0.0
+        if contributor.last_commit:
+            recency = recency_decay(contributor.last_commit)
+            commit_score = (contributor.commit_count / max_commits) * recency
+
+        # File importance scoped to area
+        area_files = contributor.files_by_area.get(area, set())
+        file_score = min(1.0, len(area_files) / 50)  # Cap at 50 files
+
+        # Complexity (placeholder)
+        complexity_score = 0.5
+
+        # Combine scores
+        total_score = (
+            weights["lines_changed"] * lines_score
+            + weights["commit_frequency"] * commit_score
+            + weights["file_importance"] * file_score
+            + weights["complexity"] * complexity_score
+        )
+
+        scores.append(
+            ExpertiseScore(
+                contributor_name=contributor.canonical_name,
+                contributor_email=contributor.canonical_email,
+                total_score=total_score * 100,  # Scale to 0-100
+                commit_count=contributor.commit_count,
+                lines_changed=contributor.total_insertions + contributor.total_deletions,
+                recency_score=lines_score,
+                complexity_score=complexity_score,
+                file_importance_score=file_score,
+            )
+        )
+
+    # Sort by total score descending
+    scores.sort(key=lambda s: s.total_score, reverse=True)
+
+    return scores

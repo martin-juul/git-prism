@@ -2,12 +2,53 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from git_prism.analyzer import AnalysisResult
+
+
+def _wrap_in_iframe(html: str | None, height: str = "100%") -> str:
+    """Wrap Pyvis HTML in an iframe to isolate it from the main document.
+
+    Pyvis generate_html() returns a full HTML document. Embedding it directly
+    causes nested HTML structure issues. Using an iframe with srcdoc properly
+    isolates the Pyvis content.
+
+    Also removes Bootstrap CSS/JS to prevent theme conflicts.
+
+    Args:
+        html: Full HTML document from Pyvis generate_html().
+        height: Iframe height (default 100%).
+
+    Returns:
+        Iframe element with Pyvis content, or empty string on failure.
+    """
+    if not html or not html.strip():
+        return ""
+
+    # Remove Bootstrap CSS link
+    html = re.sub(
+        r'<link[^>]*bootstrap[^>]*\.css[^>]*>',
+        "",
+        html,
+        flags=re.IGNORECASE,
+    )
+    # Remove Bootstrap JS script
+    html = re.sub(
+        r'<script[^>]*bootstrap[^>]*>\s*</script>',
+        "",
+        html,
+        flags=re.IGNORECASE,
+    )
+
+    # Escape quotes for srcdoc attribute
+    escaped = html.replace('"', "&quot;")
+
+    return f'<iframe srcdoc="{escaped}" style="width: 100%; height: {height}; border: none;"></iframe>'
 
 
 def create_collaboration_network(
@@ -58,7 +99,7 @@ def create_collaboration_network(
     node_sizes = {c: len(repos) * 5 + 10 for c, repos in contributor_repos.items()}
 
     # Create Pyvis network
-    net = Network(height="600px", width="100%", bgcolor="#1f2937", font_color="white")
+    net = Network(height="600px", width="100%", bgcolor="#1f2937", font_color="white", cdn_resources="in_line")
     net.from_nx(G)
 
     # Style nodes
@@ -86,7 +127,7 @@ def create_collaboration_network(
     """
     )
 
-    return net.generate_html()
+    return _wrap_in_iframe(net.generate_html())
 
 
 def create_contributor_graph(
@@ -122,7 +163,7 @@ def create_contributor_graph(
         )
         G.add_edge(result.repo_name, score.contributor_name, weight=score.total_score)
 
-    net = Network(height="500px", width="100%", bgcolor="#1f2937", font_color="white")
+    net = Network(height="500px", width="100%", bgcolor="#1f2937", font_color="white", cdn_resources="in_line")
     net.from_nx(G)
 
     # Style nodes
@@ -147,7 +188,7 @@ def create_contributor_graph(
     """
     )
 
-    html = net.generate_html()
+    html = _wrap_in_iframe(net.generate_html())
 
     if output_path:
         output_path.write_text(html)
@@ -210,7 +251,7 @@ def create_expertise_network(
         if G.nodes[node].get("group") == "contributor":
             G.nodes[node]["size"] = min(contributor_scores.get(node, 10) / 2 + 10, 35)
 
-    net = Network(height="700px", width="100%", bgcolor="#1f2937", font_color="white")
+    net = Network(height="700px", width="100%", bgcolor="#1f2937", font_color="white", cdn_resources="in_line")
     net.from_nx(G)
 
     net.set_options(
@@ -227,4 +268,4 @@ def create_expertise_network(
     """
     )
 
-    return net.generate_html()
+    return _wrap_in_iframe(net.generate_html())

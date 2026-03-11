@@ -99,29 +99,34 @@ class TestDetectFrameworks:
     """Tests for detect_frameworks function."""
 
     def test_detect_nodejs_package_json(self, temp_dir: Path) -> None:
-        """Test detecting Node.js from package.json."""
+        """Test detecting Node.js package.json (no language name as framework)."""
         (temp_dir / "package.json").write_text('{"name": "test"}')
 
         frameworks = detect_frameworks(temp_dir)
 
-        assert "Node.js" in frameworks
+        # Note: Node.js is a runtime, not a framework
+        # Empty package.json should not return any frameworks
+        assert frameworks == []
 
     def test_detect_python_requirements(self, temp_dir: Path) -> None:
-        """Test detecting Python from requirements.txt."""
+        """Test detecting Python framework from requirements.txt."""
         (temp_dir / "requirements.txt").write_text("flask==2.0.0")
 
         frameworks = detect_frameworks(temp_dir)
 
-        assert "Python" in frameworks
+        # Flask is an actual framework, Python is a language
         assert "Flask" in frameworks
+        assert "Python" not in frameworks  # Language, not framework
 
     def test_detect_rust_cargo(self, temp_dir: Path) -> None:
-        """Test detecting Rust from Cargo.toml."""
+        """Test detecting Rust Cargo.toml (no language name as framework)."""
         (temp_dir / "Cargo.toml").write_text('[package]\nname = "test"')
 
         frameworks = detect_frameworks(temp_dir)
 
-        assert "Rust" in frameworks
+        # Note: Rust is a language, not a framework
+        # Cargo.toml alone doesn't indicate a framework
+        assert frameworks == []
 
     def test_detect_react_framework(self, temp_dir: Path) -> None:
         """Test detecting React framework from package.json."""

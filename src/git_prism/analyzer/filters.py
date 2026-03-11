@@ -174,7 +174,7 @@ DEFAULT_BINARY_EXTENSIONS = {
 
 # Default generated file patterns
 DEFAULT_GENERATED_PATTERNS = {
-    # Lock files
+    # Lock files (auto-generated dependency locks - exclude from scoring)
     "package-lock.json",
     "yarn.lock",
     "pnpm-lock.yaml",
@@ -184,6 +184,17 @@ DEFAULT_GENERATED_PATTERNS = {
     "gemfile.lock",
     "pipfile.lock",
     "pdm.lock",
+    "uv.lock",
+    "bun.lockb",
+    "bun.lock",
+    "conan.lock",
+    "mix.lock",
+    "stack.yaml.lock",
+    "project.lock.json",
+    "packages.lock.json",
+    "*.lock",
+    "*.lock.yaml",
+    "*.lock.yml",
     # Minified
     "*.min.js",
     "*.min.css",

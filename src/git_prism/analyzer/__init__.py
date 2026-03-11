@@ -5,29 +5,52 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from git_prism.analyzer.classification import FileClassification, classify_file, detect_frameworks
+from git_prism.analyzer.classification import (
+    AreaClassification,
+    AreaDefinition,
+    FileClassification,
+    MonorepoInfo,
+    RepoClassification,
+    classify_file,
+    classify_repository,
+    detect_frameworks,
+    detect_fullstack_areas,
+    detect_monorepo_structure,
+)
 from git_prism.analyzer.commits import CommitInfo, stream_commits
 from git_prism.analyzer.contributors import Contributor, parse_mailmap, resolve_contributor
 from git_prism.analyzer.filters import FileFilter, create_default_filter
-from git_prism.analyzer.scoring import ExpertiseScore, calculate_expertise_scores
+from git_prism.analyzer.scoring import (
+    ExpertiseScore,
+    calculate_area_expertise_scores,
+    calculate_expertise_scores,
+)
 
 if TYPE_CHECKING:
+    from git_prism.analyzer.classification import AreaDefinition
     from git_prism.crawler import GitRepo
 
 __all__ = [
     "Analyzer",
     "AnalysisResult",
+    "AreaClassification",
+    "AreaDefinition",
     "CommitInfo",
     "Contributor",
     "ExpertiseScore",
     "FileClassification",
+    "MonorepoInfo",
+    "RepoClassification",
     "FileFilter",
     "stream_commits",
     "parse_mailmap",
     "resolve_contributor",
     "calculate_expertise_scores",
+    "calculate_area_expertise_scores",
     "classify_file",
+    "classify_repository",
     "detect_frameworks",
+    "detect_monorepo_structure",
     "create_default_filter",
 ]
 
@@ -65,6 +88,17 @@ class Analyzer:
         # Parse mailmap for identity resolution
         mailmap = parse_mailmap(str(repo.path))
 
+        # Detect monorepo structure
+        monorepo_info = detect_monorepo_structure(repo.path)
+
+        # Detect fullstack areas if not a monorepo
+        fullstack_info = None
+        if monorepo_info is None:
+            fullstack_info = detect_fullstack_areas(repo.path)
+
+        # Combined area info for file tracking
+        area_info = monorepo_info or fullstack_info
+
         # Stream and process commits
         contributors: dict[tuple[str, str], Contributor] = {}
 
@@ -72,6 +106,7 @@ class Analyzer:
             str(repo.path),
             batch_size=self.batch_size,
             max_commits=self.max_commits,
+            file_filter=self._file_filter,
         ):
             for commit in batch:
                 # Resolve to canonical identity
@@ -92,15 +127,111 @@ class Analyzer:
                 # Update contributor stats
                 contributors[key].add_commit(commit)
 
+                # Track files by area if monorepo or fullstack
+                if area_info:
+                    for file_path in commit.files:
+                        if monorepo_info:
+                            area = self._determine_file_area(file_path, monorepo_info.areas)
+                        else:
+                            area = self._determine_fullstack_file_area(file_path)
+                        contributors[key].add_file_to_area(file_path, area)
+
         # Calculate expertise scores
         scores = calculate_expertise_scores(contributors)
+
+        # Calculate per-area scores if monorepo or fullstack
+        area_scores: dict[str, list[ExpertiseScore]] = {}
+        if area_info:
+            for area_def in area_info.areas:
+                area_scores[area_def.name] = calculate_area_expertise_scores(
+                    list(contributors.values()),
+                    area_def.name,
+                )
+
+            # Add area scores to each ExpertiseScore
+            for score in scores:
+                for area_name, area_score_list in area_scores.items():
+                    for area_score in area_score_list:
+                        if (area_score.contributor_name == score.contributor_name
+                            and area_score.contributor_email == score.contributor_email):
+                            score.area_scores[area_name] = area_score.total_score
+
+        # Classify repository with monorepo awareness
+        classification = classify_repository(
+            str(repo.path),
+            self._file_filter,
+            monorepo_info=monorepo_info,
+        )
 
         return AnalysisResult(
             repo_name=repo.name,
             repo_path=repo.path,
             contributors=list(contributors.values()),
             scores=scores,
+            classification=classification,
+            area_scores=area_scores if area_info else None,
         )
+
+    def _determine_file_area(
+        self,
+        file_path: str,
+        areas: list[AreaDefinition],
+    ) -> str | None:
+        """Determine which area a file belongs to.
+
+        Args:
+            file_path: Path to the file.
+            areas: List of area definitions.
+
+        Returns:
+            Area name if matched, None for shared/root files.
+        """
+        import fnmatch
+
+        for area in areas:
+            if fnmatch.fnmatch(file_path, area.path_pattern):
+                return area.name
+            if file_path.startswith(area.path_pattern.rstrip("*")):
+                return area.name
+
+        # Root-level files go to shared
+        if file_path.startswith((".", "_")) or "/" not in file_path:
+            return "shared"
+
+        return None
+
+    def _determine_fullstack_file_area(self, file_path: str) -> str | None:
+        """Determine which fullstack area a file belongs to.
+
+        Maps Laravel directory structure to frontend/backend areas.
+
+        Args:
+            file_path: Path to the file.
+
+        Returns:
+            "frontend", "backend", or None.
+        """
+        # Backend: Laravel PHP directories
+        backend_prefixes = ["app/", "routes/", "config/", "database/", "tests/", "bootstrap/"]
+        for prefix in backend_prefixes:
+            if file_path.startswith(prefix):
+                return "backend"
+
+        # Frontend: resources/js, resources/css, resources/views (Blade/Vue)
+        frontend_prefixes = ["resources/js/", "resources/css/", "resources/views/"]
+        for prefix in frontend_prefixes:
+            if file_path.startswith(prefix):
+                return "frontend"
+
+        # Check by file extension in resources
+        if file_path.startswith("resources/"):
+            ext = file_path.split(".")[-1] if "." in file_path else ""
+            if ext in {"js", "vue", "ts", "tsx", "css", "scss", "sass"}:
+                return "frontend"
+            if ext in {"php"}:
+                return "backend"
+
+        return None
 
 
 class AnalysisResult:
@@ -112,6 +243,8 @@ class AnalysisResult:
         repo_path: Path,
         contributors: list[Contributor],
         scores: list[ExpertiseScore],
+        classification: RepoClassification | None = None,
+        area_scores: dict[str, list[ExpertiseScore]] | None = None,
     ) -> None:
         """Initialize analysis result.
 
@@ -120,8 +253,12 @@ class AnalysisResult:
             repo_path: Path to the repository.
             contributors: List of contributors found.
             scores: List of expertise scores.
+            classification: Repository classification data.
+            area_scores: Per-area expertise scores (area_name -> scores list).
         """
         self.repo_name = repo_name
         self.repo_path = repo_path if isinstance(repo_path, Path) else Path(repo_path)
         self.contributors = contributors
         self.scores = scores
+        self.classification = classification
+        self.area_scores = area_scores or {}

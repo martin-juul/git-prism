@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from git_prism.analyzer.filters import FileFilter
 
 
 @dataclass
@@ -44,6 +47,7 @@ def stream_commits(
     batch_size: int = 5000,
     max_commits: int = 0,
     include_merges: bool = False,
+    file_filter: FileFilter | None = None,
 ) -> Iterator[list[CommitInfo]]:
     """Stream commits from repository in batches.
 
@@ -55,6 +59,7 @@ def stream_commits(
         batch_size: Number of commits per batch.
         max_commits: Maximum total commits to yield (0 = all).
         include_merges: Whether to include merge commits.
+        file_filter: Optional filter to exclude files from stats (e.g., lock files).
 
     Yields:
         Lists of CommitInfo objects, each list containing up to batch_size commits.
@@ -100,10 +105,15 @@ def stream_commits(
                 deletions = diff.stats.deletions
                 files_changed = len(list(diff))
 
-                # Collect file paths
+                # Collect file paths, applying filter if provided
                 for delta in diff.deltas:
-                    if delta.new_file.path:
-                        changed_files.append(delta.new_file.path)
+                    file_path = delta.new_file.path
+                    if file_path:
+                        # Apply filter if provided
+                        if file_filter and not file_filter.should_include(Path(file_path)):
+                            continue
+                        changed_files.append(file_path)
+
             except pygit2.GitError:
                 # Skip commits with diff errors (e.g., initial commit)
                 pass

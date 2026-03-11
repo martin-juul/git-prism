@@ -9,6 +9,51 @@
     <p class="subtitle">Generated: {{ generated_at }}</p>
 </header>
 
+<!-- Code Classification -->
+{% if classification %}
+<section class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <h2>Code Classification</h2>
+    </div>
+    <div class="grid grid-4">
+        <div>
+            <span style="color: var(--text-muted); font-size: 0.8rem;">Primary Language</span>
+            <div class="badge badge-primary" style="font-size: 1rem; margin-top: 0.5rem;">{{ classification.primary_language }}</div>
+        </div>
+        <div>
+            <span style="color: var(--text-muted); font-size: 0.8rem;">Total Files</span>
+            <div class="badge badge-secondary" style="font-size: 1rem; margin-top: 0.5rem;">{{ classification.total_files }}</div>
+        </div>
+        <div>
+            <span style="color: var(--text-muted); font-size: 0.8rem;">Languages Detected</span>
+            <div style="margin-top: 0.5rem;">
+                {% for lang, count in (classification.languages.items() | list)[:5] %}
+                <span class="badge" style="font-size: 0.85rem;">{{ lang }}: {{ count }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        <div>
+            <span style="color: var(--text-muted); font-size: 0.8rem;">Frameworks</span>
+            <div style="margin-top: 0.5rem;">
+                {% for framework in classification.frameworks %}
+                <span class="badge badge-secondary">{{ framework }}</span>
+                {% else %}
+                <span style="color: var(--text-muted);">None detected</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% if filetype_chart %}
+    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+        <h3>File Type Distribution</h3>
+        <div class="chart-container">
+            {{ filetype_chart | safe }}
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
 <!-- Score Distribution -->
 <section class="card" style="margin-bottom: 2rem;">
     <div class="card-header">

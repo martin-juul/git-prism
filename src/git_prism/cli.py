@@ -13,6 +13,7 @@ from rich.table import Table
 
 from git_prism import __version__
 from git_prism.analyzer import AnalysisResult, Analyzer
+from git_prism.analyzer.parallel import ParallelResult, analyze_repos_parallel, resolve_worker_count
 from git_prism.report import ReportGenerator
 
 app = typer.Typer(
@@ -104,6 +105,14 @@ def analyze(
         bool,
         typer.Option("--verbose", "-v", help="Enable verbose output"),
     ] = False,
+    workers: Annotated[
+        str | None,
+        typer.Option(
+            "--workers",
+            "-w",
+            help="Number of parallel workers (integer or 'auto' for CPU count - 1)",
+        ),
+    ] = None,
 ) -> None:
     """Analyze git repositories and generate expertise report.
 
@@ -115,6 +124,8 @@ def analyze(
         git-prism analyze ~/projects -o report.html
         git-prism analyze . --max-commits 10000
         git-prism analyze ~/work -i node_modules -i .venv
+        git-prism analyze ~/projects -w auto
+        git-prism analyze ~/projects -w 4
     """
     setup_logging(verbose)
 
@@ -148,23 +159,57 @@ def analyze(
 
         console.print(f"[green]Found {len(repos)} repositories[/green]")
 
-        # Analyze each repository
-        analyzer = Analyzer(max_commits=max_commits, verbose=verbose)
+        # Resolve worker count
+        try:
+            resolved_workers = resolve_worker_count(workers)
+        except ValueError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
+
+        # Track failures for exit code
+        failure_count = 0
         results: list[AnalysisResult] = []
 
-        for repo in repos:
-            analyze_task = progress.add_task(
-                f"[cyan]Analyzing {repo.name}...",
-                total=None,
+        if resolved_workers == 1:
+            # Sequential path (existing behavior)
+            analyzer = Analyzer(max_commits=max_commits, verbose=verbose)
+
+            for repo in repos:
+                analyze_task = progress.add_task(
+                    f"[cyan]Analyzing {repo.name}...",
+                    total=None,
+                )
+
+                try:
+                    result = analyzer.analyze(repo)
+                    results.append(result)
+                    progress.update(analyze_task, total=1, completed=1)
+                except Exception as e:
+                    console.print(f"[red]Error analyzing {repo.name}: {e}[/red]")
+                    progress.update(analyze_task, total=1, completed=1)
+                    failure_count += 1
+        else:
+            # Parallel path
+            parallel_task = progress.add_task(
+                f"[cyan]Analyzing {len(repos)} repositories with {resolved_workers} workers...",
+                total=len(repos),
             )
 
             try:
-                result = analyzer.analyze(repo)
-                results.append(result)
-                progress.update(analyze_task, total=1, completed=1)
-            except Exception as e:
-                console.print(f"[red]Error analyzing {repo.name}: {e}[/red]")
-                progress.update(analyze_task, total=1, completed=1)
+                parallel_result = analyze_repos_parallel(
+                    repos, max_commits, resolved_workers
+                )
+                results = parallel_result.successes
+                failure_count = len(parallel_result.failures)
+                progress.update(parallel_task, completed=len(results))
+
+                # Report failures
+                for repo_name, repo_path, error in parallel_result.failures:
+                    console.print(f"[red]Error analyzing {repo_name}: {error}[/red]")
+
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Analysis interrupted. Partial results discarded.[/yellow]")
+                raise typer.Exit(130)
 
         # Generate report
         report_task = progress.add_task(
@@ -179,6 +224,13 @@ def analyze(
 
     console.print(f"\n[green]Report saved to:[/green] {output}")
     console.print(f"[dim]Open in browser:[/dim] file://{output}")
+
+    # Exit with failure count if any repos failed
+    if failure_count > 0:
+        console.print(
+            f"\n[yellow]Completed with {failure_count} error(s)[/yellow]"
+        )
+        raise typer.Exit(min(125, failure_count))
 
 
 @app.command()

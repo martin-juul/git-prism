@@ -240,3 +240,289 @@ def create_score_distribution_chart(scores: list[ExpertiseScore]) -> str:
     _apply_dark_theme(fig, xaxis_tickangle=-45, height=400, showlegend=False)
 
     return fig.to_html(include_plotlyjs=False, full_html=False)
+
+
+def create_language_distribution_chart(
+    results: list[AnalysisResult],
+) -> str:
+    """Create a horizontal bar chart showing language distribution.
+
+    Args:
+        results: List of AnalysisResult objects with classification data.
+
+    Returns:
+        HTML string containing Plotly chart.
+    """
+    from collections import Counter
+
+    import plotly.graph_objects as go
+
+    # Aggregate languages across all repos
+    all_languages: Counter[str] = Counter()
+    for result in results:
+        if result.classification:
+            all_languages.update(result.classification.languages)
+
+    if not all_languages:
+        return "<p>No languages detected</p>"
+
+    # Get top 10 languages
+    top_languages = dict(all_languages.most_common(10))
+
+    fig = go.Figure(
+        go.Bar(
+            x=list(top_languages.values()),
+            y=list(top_languages.keys()),
+            orientation="h",
+            marker_color=ACCENT_PRIMARY,
+        )
+    )
+
+    _apply_dark_theme(
+        fig,
+        title="Language Distribution",
+        xaxis_title="Files",
+        yaxis_title="",
+        height=400,
+        margin=dict(l=120, r=20, t=40, b=40),
+        autosize=True,
+    )
+
+    # Make responsive
+    fig.update_layout(autosize=True)
+
+    return fig.to_html(include_plotlyjs=False, full_html=False, config={"responsive": True})
+
+
+def create_filetype_chart(
+    results: list[AnalysisResult],
+) -> str:
+    """Create a stacked horizontal bar showing file type percentage distribution per repo.
+
+    Args:
+        results: List of AnalysisResult objects with classification data.
+
+    Returns:
+        HTML string containing Plotly chart.
+    """
+    from git_prism.analyzer.classification import FileType
+
+    import plotly.graph_objects as go
+
+    # Collect file type data per repo (as percentages)
+    repo_names = []
+    frontend_pcts = []
+    backend_pcts = []
+    data_pcts = []
+    config_pcts = []
+    test_pcts = []
+    doc_pcts = []
+
+    file_type_order = [
+        (FileType.FRONTEND, frontend_pcts),
+        (FileType.BACKEND, backend_pcts),
+        (FileType.DATA, data_pcts),
+        (FileType.CONFIG, config_pcts),
+        (FileType.TEST, test_pcts),
+        (FileType.DOCUMENTATION, doc_pcts),
+    ]
+
+    for result in results:
+        if not result.classification or result.classification.total_files == 0:
+            continue
+
+        repo_names.append(result.repo_name)
+        ft = result.classification.file_types
+        total = result.classification.total_files
+
+        for file_type, pcts_list in file_type_order:
+            count = ft.get(file_type, 0)
+            pcts_list.append((count / total) * 100)
+
+    if not repo_names:
+        return "<p>No file type data available</p>"
+
+    fig = go.Figure()
+
+    colors = [
+        ACCENT_PRIMARY,  # Frontend - Indigo
+        ACCENT_SECONDARY,  # Backend - Green
+        ACCENT_WARNING,  # Data - Amber
+        "#a78bfa",  # Config - Purple
+        ACCENT_DANGER,  # Test - Red
+        "#2dd4bf",  # Docs - Teal
+    ]
+
+    labels = ["Frontend", "Backend", "Data", "Config", "Test", "Docs"]
+    pcts_lists = [frontend_pcts, backend_pcts, data_pcts, config_pcts, test_pcts, doc_pcts]
+
+    for label, pcts, color in zip(labels, pcts_lists, colors):
+        fig.add_trace(
+            go.Bar(
+                name=label,
+                y=repo_names,
+                x=pcts,
+                orientation="h",
+                marker_color=color,
+                hovertemplate="%{x:.1f}%<extra></extra>",
+            )
+        )
+
+    _apply_dark_theme(
+        fig,
+        title="File Type Distribution",
+        xaxis_title="Percentage (%)",
+        yaxis_title="",
+        barmode="stack",
+        xaxis={"range": [0, 100]},
+        height=max(300, len(repo_names) * 40),
+        margin=dict(l=150, r=20, t=40, b=40),
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        autosize=True,
+    )
+
+    # Make responsive
+    fig.update_layout(autosize=True)
+
+    return fig.to_html(include_plotlyjs=False, full_html=False, config={"responsive": True})
+
+
+def create_area_distribution_chart(
+    results: list[AnalysisResult],
+) -> str:
+    """Create a chart showing contributor distribution across monorepo areas.
+
+    For each monorepo, shows how contributors and activity are distributed
+    across detected areas (frontend, backend, shared, etc.).
+
+    Args:
+        results: List of AnalysisResult objects with classification data.
+
+    Returns:
+        HTML string containing Plotly chart, or empty string if no monorepos.
+    """
+    import plotly.graph_objects as go
+
+    # Filter to monorepos only
+    monorepo_results = [
+        r for r in results
+        if r.classification and r.classification.is_monorepo
+    ]
+
+    if not monorepo_results:
+        return ""
+
+    fig = go.Figure()
+
+    # Collect area data
+    area_data: dict[str, dict[str, int]] = {}  # repo_name -> {area -> files}
+
+    for result in monorepo_results:
+        if not result.classification or not result.classification.areas:
+            continue
+
+        area_data[result.repo_name] = {}
+        for area_name, area_cls in result.classification.areas.items():
+            area_data[result.repo_name][area_name] = area_cls.total_files
+
+    if not area_data:
+        return ""
+
+    # Get all unique area names
+    all_areas = set()
+    for repo_areas in area_data.values():
+        all_areas.update(repo_areas.keys())
+
+    # Sort areas: frontend, backend, then alphabetically
+    def area_sort_key(name):
+        if name == "frontend":
+            return (0, name)
+        if name == "backend":
+            return (1, name)
+        if name == "shared":
+            return (2, name)
+        return (3, name)
+
+    sorted_areas = sorted(all_areas, key=area_sort_key)
+
+    # Create stacked bar chart
+    repo_names = list(area_data.keys())
+    colors = CHART_PALETTE
+
+    for i, area in enumerate(sorted_areas):
+        values = [area_data[repo].get(area, 0) for repo in repo_names]
+        color = colors[i % len(colors)]
+        fig.add_trace(
+            go.Bar(
+                name=area.title(),
+                y=repo_names,
+                x=values,
+                orientation="h",
+                marker_color=color,
+                hovertemplate=f"{area.title()}: %{{x}} files<extra></extra>",
+            )
+        )
+
+    _apply_dark_theme(
+        fig,
+        title="Monorepo Area Distribution",
+        xaxis_title="Files",
+        yaxis_title="",
+        barmode="stack",
+        height=max(300, len(repo_names) * 50),
+        margin=dict(l=150, r=20, t=40, b=40),
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        autosize=True,
+    )
+
+    return fig.to_html(include_plotlyjs=False, full_html=False, config={"responsive": True})
+
+
+def create_area_expertise_chart(
+    result: AnalysisResult,
+    area_name: str,
+    scores: list[ExpertiseScore],
+    top_n: int = 10,
+) -> str:
+    """Create a horizontal bar chart showing expertise scores for a specific area.
+
+    Args:
+        result: AnalysisResult for a single repository.
+        area_name: Name of the area to show scores for.
+        scores: List of ExpertiseScore objects for this area.
+        top_n: Number of top contributors to show.
+
+    Returns:
+        HTML string containing Plotly chart.
+    """
+    import plotly.graph_objects as go
+
+    if not scores:
+        return f"<p>No expertise data for {area_name}</p>"
+
+    # Take top N
+    top_scores = scores[:top_n]
+    names = [s.contributor_name for s in top_scores]
+    values = [s.total_score for s in top_scores]
+
+    fig = go.Figure(
+        go.Bar(
+            x=values,
+            y=names,
+            orientation="h",
+            marker_color=ACCENT_SECONDARY,
+            hovertemplate="%{x:.1f}<extra></extra>",
+        )
+    )
+
+    _apply_dark_theme(
+        fig,
+        title=f"{area_name.title()} Expertise",
+        xaxis_title="Score",
+        yaxis_title="",
+        height=max(250, len(names) * 30),
+        margin=dict(l=150, r=20, t=40, b=40),
+        autosize=True,
+    )
+
+    return fig.to_html(include_plotlyjs=False, full_html=False, config={"responsive": True})
